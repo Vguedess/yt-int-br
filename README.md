@@ -8,14 +8,14 @@ The web application baseline is intentionally pinned for dependency compatibilit
 
 - **Next.js 16.2.12**
 - **React / React DOM 19.2.8**
-- **Node.js 22.x LTS**
+- **Node.js 24.x LTS**
 - **TypeScript 5.9.2**
 
 See [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md) for the verified dependency matrix and upgrade policy.
 
 ## Run locally
 
-Use Node.js 22.x, then:
+Use Node.js 24.x, then:
 
 ```bash
 npm install
