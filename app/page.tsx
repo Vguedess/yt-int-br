@@ -98,7 +98,7 @@ export default async function Home() {
             não entram na análise.
           </p>
         </div>
-        <div className="filterBadge">Filtro global · v2026.08.19</div>
+        <div className="filterBadge">Filtro global · v2026.08.19.2</div>
       </section>
 
       <section className="statGrid" aria-label="Resumo do radar atual">
@@ -108,7 +108,7 @@ export default async function Home() {
           <p>{topHype?.title ?? 'Aguardando dados elegíveis da API'}</p>
         </article>
         <article className="statCard">
-          <span>Mais visto · publicado em 24h</span>
+          <span>Mais visto · publicado há ≤24h</span>
           <strong>{top24h ? compactNumber.format(top24h.views) : '—'}</strong>
           <p>{top24h?.title ?? 'Aguardando dados elegíveis da API'}</p>
         </article>
@@ -119,8 +119,8 @@ export default async function Home() {
         </article>
         <article className="statCard mutedCard">
           <span>Maior ganho de inscritos · 24h</span>
-          <strong>Baseline</strong>
-          <p>Será calculado por diferença entre snapshots diários dos canais monitorados.</p>
+          <strong>Banco</strong>
+          <p>Exige snapshots persistentes. O banco ainda não está conectado ao projeto.</p>
         </article>
       </section>
 
@@ -151,10 +151,10 @@ export default async function Home() {
         <article className="panel">
           <div className="panelHeader">
             <div>
-              <p className="sectionKicker">ÚLTIMAS 24H</p>
+              <p className="sectionKicker">PUBLICADOS HÁ ≤24H</p>
               <h3>Mais vistos entre os recém-publicados</h3>
             </div>
-            <span className="panelHint">publicados nas últimas 24 horas</span>
+            <span className="panelHint">total atual de views · não é delta de 24h</span>
           </div>
           <div className="videoList">
             {popularity.publishedLast24h.slice(0, 6).map((video, index) => (
@@ -170,15 +170,15 @@ export default async function Home() {
           <p className="sectionKicker">CANAIS · MOMENTUM</p>
           <h3>Ganho real de inscritos em 24h</h3>
           <p>
-            O YouTube expõe a contagem pública atual, não o delta histórico de inscritos de outros canais.
-            O sistema vai calcular esse indicador com snapshots próprios e exibirá o ranking assim que houver
-            duas observações comparáveis separadas por aproximadamente 24 horas.
+            O YouTube fornece a contagem pública atual, mas o ranking de ganho em 24 horas exige histórico.
+            Assim que o storage persistente estiver conectado, o sistema armazenará snapshots dos canais
+            monitorados e calculará o delta entre observações comparáveis, sem estimativas inventadas.
           </p>
         </div>
         <div className="baselineMeter">
           <span>Estado</span>
-          <strong>BASELINE EM COLETA</strong>
-          <small>sem estimativas inventadas</small>
+          <strong>AGUARDANDO STORAGE</strong>
+          <small>postgres ainda não conectado</small>
         </div>
       </section>
 
