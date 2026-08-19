@@ -81,7 +81,7 @@ export type CurrentPopularitySnapshot = {
   ok: boolean;
   generatedAt: string;
   region: 'BR';
-  filterVersion: '2026-08-19';
+  filterVersion: '2026-08-19.1';
   source: 'youtube-data-api-v3';
   mostPopular: PopularVideo[];
   publishedLast24h: PopularVideo[];
@@ -268,7 +268,7 @@ async function getMostPopular(): Promise<{ items: PopularVideo[]; excludedCount:
 async function getPublishedLast24h(): Promise<{ items: PopularVideo[]; excludedCount: number }> {
   const publishedAfter = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
   const response = await youtubeFetch<YouTubeListResponse<{ id?: { videoId?: string } }>>('search', {
-    part: 'id',
+    part: 'snippet',
     type: 'video',
     order: 'viewCount',
     publishedAfter,
@@ -296,7 +296,7 @@ export async function getCurrentPopularity(): Promise<CurrentPopularitySnapshot>
       ok: true,
       generatedAt,
       region: REGION,
-      filterVersion: '2026-08-19',
+      filterVersion: '2026-08-19.1',
       source: 'youtube-data-api-v3',
       mostPopular: mostPopular.items.slice(0, 8),
       publishedLast24h: publishedLast24h.items.slice(0, 8),
@@ -309,7 +309,7 @@ export async function getCurrentPopularity(): Promise<CurrentPopularitySnapshot>
       ok: false,
       generatedAt,
       region: REGION,
-      filterVersion: '2026-08-19',
+      filterVersion: '2026-08-19.1',
       source: 'youtube-data-api-v3',
       mostPopular: [],
       publishedLast24h: [],
