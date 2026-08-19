@@ -81,10 +81,11 @@ export type CurrentPopularitySnapshot = {
   ok: boolean;
   generatedAt: string;
   region: 'BR';
-  filterVersion: '2026-08-19.1';
+  filterVersion: '2026-08-19.2';
   source: 'youtube-data-api-v3';
   mostPopular: PopularVideo[];
   publishedLast24h: PopularVideo[];
+  publishedLast24hBasis: 'youtube-search-plus-current-chart';
   channelGrowth24h: null;
   channelGrowthStatus: 'baseline-required';
   excludedCount: number;
@@ -224,6 +225,17 @@ function applyRelativeHypeScore(items: PopularVideo[]): PopularVideo[] {
   }));
 }
 
+function mergeUniqueVideos(...groups: PopularVideo[][]): PopularVideo[] {
+  const byId = new Map<string, PopularVideo>();
+  for (const group of groups) {
+    for (const video of group) {
+      const current = byId.get(video.id);
+      if (!current || video.views > current.views) byId.set(video.id, video);
+    }
+  }
+  return [...byId.values()];
+}
+
 async function hydrateVideos(videoIds: string[]): Promise<{ items: PopularVideo[]; excludedCount: number }> {
   const unique = [...new Set(videoIds.filter(Boolean))].slice(0, 50);
   if (!unique.length) return { items: [], excludedCount: 0 };
@@ -287,32 +299,39 @@ async function getPublishedLast24h(): Promise<{ items: PopularVideo[]; excludedC
 export async function getCurrentPopularity(): Promise<CurrentPopularitySnapshot> {
   const generatedAt = new Date().toISOString();
   try {
-    const [mostPopular, publishedLast24h] = await Promise.all([
+    const [mostPopular, searchLast24h] = await Promise.all([
       getMostPopular(),
       getPublishedLast24h()
     ]);
+
+    const recentFromCurrentChart = mostPopular.items.filter((video) => video.ageHours <= 24);
+    const publishedLast24h = mergeUniqueVideos(searchLast24h.items, recentFromCurrentChart)
+      .filter((video) => video.ageHours <= 24)
+      .sort((a, b) => b.views - a.views);
 
     return {
       ok: true,
       generatedAt,
       region: REGION,
-      filterVersion: '2026-08-19.1',
+      filterVersion: '2026-08-19.2',
       source: 'youtube-data-api-v3',
       mostPopular: mostPopular.items.slice(0, 8),
-      publishedLast24h: publishedLast24h.items.slice(0, 8),
+      publishedLast24h: publishedLast24h.slice(0, 8),
+      publishedLast24hBasis: 'youtube-search-plus-current-chart',
       channelGrowth24h: null,
       channelGrowthStatus: 'baseline-required',
-      excludedCount: mostPopular.excludedCount + publishedLast24h.excludedCount
+      excludedCount: mostPopular.excludedCount + searchLast24h.excludedCount
     };
   } catch (error) {
     return {
       ok: false,
       generatedAt,
       region: REGION,
-      filterVersion: '2026-08-19.1',
+      filterVersion: '2026-08-19.2',
       source: 'youtube-data-api-v3',
       mostPopular: [],
       publishedLast24h: [],
+      publishedLast24hBasis: 'youtube-search-plus-current-chart',
       channelGrowth24h: null,
       channelGrowthStatus: 'baseline-required',
       excludedCount: 0,
