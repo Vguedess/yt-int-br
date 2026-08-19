@@ -17,7 +17,8 @@ export const GLOBAL_CONTENT_POLICY = {
     'jazzghost',
     'tazercraft',
     'robin hood gamer',
-    'tex hs'
+    'tex hs',
+    'favela sound'
   ],
   musicMarkers: [
     'official music video',
@@ -26,7 +27,23 @@ export const GLOBAL_CONTENT_POLICY = {
     'lyric video',
     'lyrics video',
     'letra oficial',
+    'álbum completo',
+    'album completo',
+    'cd de paredão',
+    'cd de paredao',
+    'playlist musical',
     'vevo'
+  ],
+  musicChannelMarkers: [
+    ' music',
+    'música',
+    'musica',
+    'records',
+    'recordings',
+    'gravadora',
+    'vevo',
+    'sound',
+    'som livre'
   ],
   kidsChannelMarkers: [
     'kids',
@@ -139,6 +156,10 @@ export function evaluateContentEligibility(candidate: ContentCandidate): Content
 
   if (containsAny(videoText, GLOBAL_CONTENT_POLICY.musicMarkers)) {
     reasons.push('music-content');
+  }
+
+  if (containsAny(channelText, GLOBAL_CONTENT_POLICY.musicChannelMarkers)) {
+    reasons.push('music-channel');
   }
 
   if (candidate.madeForKids || candidate.channelMadeForKids) {
