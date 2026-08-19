@@ -13,7 +13,10 @@ export const GLOBAL_CONTENT_POLICY = {
     'authenticgames',
     'authentic games',
     'rezendeevil',
-    'rezende evil'
+    'rezende evil',
+    'jazzghost',
+    'tazercraft',
+    'robin hood gamer'
   ],
   musicMarkers: [
     'official music video',
@@ -34,6 +37,23 @@ export const GLOBAL_CONTENT_POLICY = {
     'galinha pintadinha',
     'turma da mônica',
     'turma da monica'
+  ],
+  preteenContentMarkers: [
+    'minecraft',
+    'roblox',
+    'blox fruits',
+    'brookhaven',
+    'skibidi',
+    'tung tung',
+    'brainrot',
+    'poppy playtime',
+    'rainbow friends',
+    'teardown',
+    'spider-man',
+    'spiderman',
+    'homem aranha',
+    'escola do jazzghost',
+    'gta multiverse'
   ],
   religiousChannelMarkers: [
     'igreja',
@@ -124,6 +144,10 @@ export function evaluateContentEligibility(candidate: ContentCandidate): Content
 
   if (containsAny(channelText, GLOBAL_CONTENT_POLICY.kidsChannelMarkers)) {
     reasons.push('kids-channel');
+  }
+
+  if (containsAny(videoText, GLOBAL_CONTENT_POLICY.preteenContentMarkers)) {
+    reasons.push('preteen-content-marker');
   }
 
   if (containsAny(channelText, GLOBAL_CONTENT_POLICY.religiousChannelMarkers)) {
