@@ -16,7 +16,8 @@ export const GLOBAL_CONTENT_POLICY = {
     'rezende evil',
     'jazzghost',
     'tazercraft',
-    'robin hood gamer'
+    'robin hood gamer',
+    'tex hs'
   ],
   musicMarkers: [
     'official music video',
@@ -53,7 +54,9 @@ export const GLOBAL_CONTENT_POLICY = {
     'spiderman',
     'homem aranha',
     'escola do jazzghost',
-    'gta multiverse'
+    'gta multiverse',
+    'minegirl',
+    'minegril'
   ],
   religiousChannelMarkers: [
     'igreja',
