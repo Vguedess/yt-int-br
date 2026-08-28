@@ -19,6 +19,31 @@ export type TopicPulse = {
   representativeVideos: PopularVideo[];
 };
 
+export type VideoTopic = {
+  key: string;
+  label: string;
+  source: 'rule' | 'fallback';
+};
+
+export type TopicRepresentative = {
+  topicKey: string;
+  topicLabel: string;
+  video: PopularVideo;
+  topicVideoCount: number;
+  collapsedCount: number;
+};
+
+export type RankingHomogeneity = {
+  index: number;
+  rawPairSimilarity: number;
+  dominantTopicVideoShare: number;
+  dominantTopicLabel: string | null;
+  videoCount: number;
+  pairCount: number;
+  interpretation: 'DIVERSA' | 'MODERADA' | 'ALTA' | 'MUITO ALTA';
+  curve: 'sigmoid-saturation-v1';
+};
+
 type TopicRule = {
   key: string;
   label: string;
@@ -79,7 +104,8 @@ const FALLBACK_STOPWORDS = new Set([
   'um', 'uma', 'uns', 'umas', 'para', 'por', 'com', 'sem', 'que', 'como', 'mais', 'novo', 'nova',
   'novos', 'novas', 'urgente', 'agora', 'hoje', 'ontem', 'amanha', 'amanhã', 'analise', 'análise',
   'analisando', 'trailer', 'gameplay', 'gameplays', 'vazou', 'revelado', 'revelados', 'completo',
-  'completa', 'tudo', 'vez', 'foi', 'tem', 'isso', 'esse', 'essa', 'meu', 'minha', 'joguei'
+  'completa', 'tudo', 'vez', 'foi', 'tem', 'isso', 'esse', 'essa', 'meu', 'minha', 'joguei',
+  'react', 'reagindo', 'reacao', 'reação', 'segredos', 'detalhes', 'primeiras', 'impressoes', 'impressões'
 ]);
 
 function normalize(value: string): string {
@@ -100,25 +126,168 @@ function titleCase(value: string): string {
     .join(' ');
 }
 
-function fallbackTopic(video: PopularVideo): { key: string; label: string } {
-  const tokens = normalize(video.title)
-    .split(' ')
-    .filter((token) => token.length >= 3 && !FALLBACK_STOPWORDS.has(token));
-
-  const selected = tokens.slice(0, 2);
-  if (!selected.length) return { key: `video-${video.id}`, label: 'Outros assuntos' };
-
-  const key = selected.join('-');
-  return { key, label: titleCase(selected.join(' ')) };
+function meaningfulTokens(title: string): Set<string> {
+  return new Set(
+    normalize(title)
+      .split(' ')
+      .filter((token) => token.length >= 3 && !FALLBACK_STOPWORDS.has(token))
+  );
 }
 
-function classifyTopic(video: PopularVideo): { key: string; label: string } {
+function fallbackTopic(video: PopularVideo): VideoTopic {
+  const tokens = [...meaningfulTokens(video.title)];
+  const selected = tokens.slice(0, 2);
+  if (!selected.length) {
+    return { key: `video-${video.id}`, label: 'Outros assuntos', source: 'fallback' };
+  }
+
+  return {
+    key: selected.join('-'),
+    label: titleCase(selected.join(' ')),
+    source: 'fallback'
+  };
+}
+
+export function classifyVideoTopic(video: PopularVideo): VideoTopic {
   const haystack = normalize(video.title);
   const rule = TOPIC_RULES.find((candidate) =>
     candidate.markers.some((marker) => haystack.includes(normalize(marker)))
   );
 
-  return rule ? { key: rule.key, label: rule.label } : fallbackTopic(video);
+  return rule
+    ? { key: rule.key, label: rule.label, source: 'rule' }
+    : fallbackTopic(video);
+}
+
+function jaccardSimilarity(a: Set<string>, b: Set<string>): number {
+  if (!a.size || !b.size) return 0;
+  let intersection = 0;
+  for (const token of a) if (b.has(token)) intersection += 1;
+  const union = new Set([...a, ...b]).size;
+  return union ? intersection / union : 0;
+}
+
+/**
+ * Core-topic similarity intentionally dominates editorial-angle similarity.
+ * A react, analysis and secrets video about the same subject should be nearly identical
+ * for topic-homogeneity purposes even if their wording and format differ.
+ */
+function thematicPairSimilarity(a: PopularVideo, b: PopularVideo): number {
+  const topicA = classifyVideoTopic(a);
+  const topicB = classifyVideoTopic(b);
+  const lexical = jaccardSimilarity(meaningfulTokens(a.title), meaningfulTokens(b.title));
+
+  if (topicA.key === topicB.key) {
+    const thematicBase = topicA.source === 'rule' && topicB.source === 'rule' ? 0.96 : 0.88;
+    return Math.min(1, thematicBase + lexical * (1 - thematicBase));
+  }
+
+  // Different core topics can still share some vocabulary, but that overlap is deliberately capped.
+  return Math.min(0.58, lexical * 0.72);
+}
+
+/**
+ * Normalized logistic curve. The inflection point is deliberately below the midpoint,
+ * so early repetition raises the score quickly while additional repetition above the
+ * average produces diminishing marginal gains and saturates toward 100.
+ */
+function sigmoidSaturation(rawSimilarity: number): number {
+  const x = Math.max(0, Math.min(1, rawSimilarity));
+  const steepness = 7;
+  const center = 0.22;
+  const sigmoid = (value: number) => 1 / (1 + Math.exp(-value));
+  const low = sigmoid(-steepness * center);
+  const high = sigmoid(steepness * (1 - center));
+  const transformed = (sigmoid(steepness * (x - center)) - low) / (high - low);
+  return Math.max(0, Math.min(100, Math.round(transformed * 100)));
+}
+
+export function calculateRankingHomogeneity(videos: PopularVideo[]): RankingHomogeneity {
+  const unique = [...new Map(videos.map((video) => [video.id, video])).values()];
+  const videoCount = unique.length;
+
+  if (videoCount < 2) {
+    return {
+      index: 0,
+      rawPairSimilarity: 0,
+      dominantTopicVideoShare: videoCount ? 1 : 0,
+      dominantTopicLabel: videoCount ? classifyVideoTopic(unique[0]).label : null,
+      videoCount,
+      pairCount: 0,
+      interpretation: 'DIVERSA',
+      curve: 'sigmoid-saturation-v1'
+    };
+  }
+
+  let similaritySum = 0;
+  let pairCount = 0;
+  for (let i = 0; i < unique.length; i += 1) {
+    for (let j = i + 1; j < unique.length; j += 1) {
+      similaritySum += thematicPairSimilarity(unique[i], unique[j]);
+      pairCount += 1;
+    }
+  }
+
+  const rawPairSimilarity = pairCount ? similaritySum / pairCount : 0;
+  const index = sigmoidSaturation(rawPairSimilarity);
+
+  const topicCounts = new Map<string, { label: string; count: number }>();
+  for (const video of unique) {
+    const topic = classifyVideoTopic(video);
+    const current = topicCounts.get(topic.key) ?? { label: topic.label, count: 0 };
+    current.count += 1;
+    topicCounts.set(topic.key, current);
+  }
+  const dominant = [...topicCounts.values()].sort((a, b) => b.count - a.count)[0];
+
+  const interpretation: RankingHomogeneity['interpretation'] =
+    index >= 85 ? 'MUITO ALTA' : index >= 65 ? 'ALTA' : index >= 40 ? 'MODERADA' : 'DIVERSA';
+
+  return {
+    index,
+    rawPairSimilarity: Math.round(rawPairSimilarity * 1000) / 1000,
+    dominantTopicVideoShare: dominant ? dominant.count / videoCount : 0,
+    dominantTopicLabel: dominant?.label ?? null,
+    videoCount,
+    pairCount,
+    interpretation,
+    curve: 'sigmoid-saturation-v1'
+  };
+}
+
+export function diversifyVideosByTopic(
+  videos: PopularVideo[],
+  mode: 'hype' | 'views'
+): TopicRepresentative[] {
+  const sorted = [...videos].sort((a, b) =>
+    mode === 'hype' ? b.hypeScore - a.hypeScore : b.views - a.views
+  );
+  const counts = new Map<string, { label: string; count: number }>();
+
+  for (const video of sorted) {
+    const topic = classifyVideoTopic(video);
+    const current = counts.get(topic.key) ?? { label: topic.label, count: 0 };
+    current.count += 1;
+    counts.set(topic.key, current);
+  }
+
+  const seen = new Set<string>();
+  const representatives: TopicRepresentative[] = [];
+  for (const video of sorted) {
+    const topic = classifyVideoTopic(video);
+    if (seen.has(topic.key)) continue;
+    seen.add(topic.key);
+    const count = counts.get(topic.key)?.count ?? 1;
+    representatives.push({
+      topicKey: topic.key,
+      topicLabel: topic.label,
+      video,
+      topicVideoCount: count,
+      collapsedCount: Math.max(0, count - 1)
+    });
+  }
+
+  return representatives;
 }
 
 function clampScore(value: number): number {
@@ -133,7 +302,7 @@ export function buildTopicPulses(videos: PopularVideo[]): TopicPulse[] {
   const groups = new Map<string, { label: string; videos: PopularVideo[] }>();
 
   for (const video of uniqueVideos) {
-    const topic = classifyTopic(video);
+    const topic = classifyVideoTopic(video);
     const group = groups.get(topic.key) ?? { label: topic.label, videos: [] };
     group.videos.push(video);
     groups.set(topic.key, group);
