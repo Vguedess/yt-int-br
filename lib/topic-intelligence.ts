@@ -32,6 +32,11 @@ const TOPIC_RULES: TopicRule[] = [
     markers: ['gta 6', 'gta vi', 'grand theft auto 6', 'grand theft auto vi']
   },
   {
+    key: 'free-fire',
+    label: 'Free Fire',
+    markers: ['free fire', 'garena free fire']
+  },
+  {
     key: 'marvel-mcu',
     label: 'Marvel / MCU',
     markers: [
@@ -193,7 +198,7 @@ export function buildTopicPulses(videos: PopularVideo[]): TopicPulse[] {
       label: topic.label,
       stage,
       videoCount: topic.videoCount,
-      channelCount: topic.channelCount,
+      channelCount,
       totalViews: topic.totalViews,
       totalViewsPerHour: topic.totalViewsPerHour,
       averageHype: Math.round(topic.averageHype),
