@@ -1,6 +1,6 @@
 import Image from 'next/image';
 import { getCurrentPopularity, type PopularVideo } from '@/lib/youtube-popularity';
-import type { TopicPulse } from '@/lib/topic-intelligence';
+import type { TopicPulse, TopicRepresentative } from '@/lib/topic-intelligence';
 
 export const revalidate = 3600;
 
@@ -28,7 +28,19 @@ function formatPercent(value: number): string {
   return `${Math.round(value * 100)}%`;
 }
 
-function VideoRow({ video, rank, mode }: { video: PopularVideo; rank: number; mode: 'hype' | 'views' }) {
+function VideoRow({
+  video,
+  rank,
+  mode,
+  topicLabel,
+  collapsedCount = 0
+}: {
+  video: PopularVideo;
+  rank: number;
+  mode: 'hype' | 'views';
+  topicLabel?: string;
+  collapsedCount?: number;
+}) {
   return (
     <a
       className="videoRow"
@@ -55,6 +67,7 @@ function VideoRow({ video, rank, mode }: { video: PopularVideo; rank: number; mo
         <strong>{video.title}</strong>
         <span>{video.channelTitle}</span>
         <div className="videoMeta">
+          {topicLabel ? <span>Tema: {topicLabel}</span> : null}
           <span>{compactNumber.format(video.views)} views</span>
           <span>{formatDuration(video.durationSeconds)}</span>
           {mode === 'hype' ? (
@@ -62,6 +75,7 @@ function VideoRow({ video, rank, mode }: { video: PopularVideo; rank: number; mo
           ) : (
             <span>{video.ageHours.toFixed(video.ageHours < 10 ? 1 : 0)}h no ar</span>
           )}
+          {collapsedCount > 0 ? <span>+{collapsedCount} semelhantes consolidados</span> : null}
         </div>
       </div>
       <div className={mode === 'hype' ? 'scoreBadge' : 'viewsBadge'}>
@@ -69,6 +83,26 @@ function VideoRow({ video, rank, mode }: { video: PopularVideo; rank: number; mo
         <strong>{mode === 'hype' ? video.hypeScore : compactNumber.format(video.views)}</strong>
       </div>
     </a>
+  );
+}
+
+function RepresentativeRow({
+  item,
+  rank,
+  mode
+}: {
+  item: TopicRepresentative;
+  rank: number;
+  mode: 'hype' | 'views';
+}) {
+  return (
+    <VideoRow
+      video={item.video}
+      rank={rank}
+      mode={mode}
+      topicLabel={item.topicLabel}
+      collapsedCount={item.collapsedCount}
+    />
   );
 }
 
@@ -107,6 +141,7 @@ export default async function Home() {
   const dominantTopic = popularity.topics[0];
   const acceleratingTopic = popularity.acceleratingTopics[0];
   const top24h = popularity.publishedLast24h[0];
+  const homogeneity = popularity.homogeneity;
 
   return (
     <main className="dashboardPage">
@@ -127,11 +162,11 @@ export default async function Home() {
       <section className="heroSection">
         <div>
           <p className="sectionKicker">AGORA</p>
-          <h2>Quais temas estão dominando — e quais estão acelerando</h2>
+          <h2>Quais temas estão dominando — e quanto o ranking está repetindo a mesma narrativa</h2>
           <p className="sectionIntro">
-            O radar agora agrupa os principais vídeos em temas para distinguir um vídeo isolado de uma narrativa
-            que está ganhando força em múltiplos canais. O estágio de aceleração ainda é um proxy de momentum
-            atual; será substituído por aceleração temporal real conforme o Neon acumular snapshots.
+            O radar agrupa vídeos por núcleo temático. Reacts, análises, segredos e explicações sobre o mesmo assunto
+            são tratados como conteúdo altamente semelhante para medir concentração de atenção, mesmo quando o formato
+            editorial é diferente.
           </p>
         </div>
         <div className="filterBadge">Filtro global · v2026.08.19.2</div>
@@ -157,14 +192,17 @@ export default async function Home() {
           </p>
         </article>
         <article className="statCard">
+          <span>Homogeneidade do ranking</span>
+          <strong>{homogeneity.index}</strong>
+          <p>
+            {homogeneity.interpretation} · {formatPercent(homogeneity.dominantTopicVideoShare)} dos vídeos no maior cluster
+            {homogeneity.dominantTopicLabel ? ` (${homogeneity.dominantTopicLabel})` : ''}. Curva sigmoidal de saturação.
+          </p>
+        </article>
+        <article className="statCard">
           <span>Mais visto · publicado há ≤24h</span>
           <strong>{top24h ? compactNumber.format(top24h.views) : '—'}</strong>
           <p>{top24h?.title ?? 'Aguardando dados elegíveis da API'}</p>
-        </article>
-        <article className="statCard mutedCard">
-          <span>Histórico temporal</span>
-          <strong>Neon</strong>
-          <p>Postgres conectado. A série temporal começa a transformar momentum em aceleração observada.</p>
         </article>
       </section>
 
@@ -217,9 +255,10 @@ export default async function Home() {
         </div>
 
         <p className="methodNote">
-          “Aceleração” ainda não significa d²views/dt² observado. Nesta fase, o sistema usa um proxy de momentum.
-          Com snapshots suficientes no Neon, essa classificação passará a considerar velocidade e aceleração reais
-          do tema ao longo do tempo.
+          Homogeneidade: média das similaridades temáticas entre todos os pares de vídeos, transformada por uma curva
+          sigmoidal normalizada. A curva dá mais peso ao início da concentração e reduz o ganho marginal quando a
+          repetição já está acima da média. Vídeos do mesmo núcleo temático recebem similaridade-base de 96%, podendo
+          se aproximar de 100% quando também compartilham termos específicos.
         </p>
       </section>
 
@@ -227,50 +266,50 @@ export default async function Home() {
         <article className="panel">
           <div className="panelHeader">
             <div>
-              <p className="sectionKicker">HYPE AGORA</p>
-              <h3>Vídeos que alimentam os temas</h3>
+              <p className="sectionKicker">HYPE · POR TEMA</p>
+              <h3>Um representante por narrativa</h3>
             </div>
-            <span className="panelHint">YouTube mostPopular + score interno</span>
+            <span className="panelHint">duplicatas temáticas consolidadas</span>
           </div>
           <div className="videoList">
-            {popularity.mostPopular.slice(0, 6).map((video, index) => (
-              <VideoRow key={video.id} video={video} rank={index + 1} mode="hype" />
+            {popularity.mostPopularByTopic.slice(0, 6).map((item, index) => (
+              <RepresentativeRow key={item.topicKey} item={item} rank={index + 1} mode="hype" />
             ))}
-            {!popularity.mostPopular.length ? <p className="emptyState">Sem itens elegíveis nesta leitura.</p> : null}
+            {!popularity.mostPopularByTopic.length ? <p className="emptyState">Sem temas elegíveis nesta leitura.</p> : null}
           </div>
         </article>
 
         <article className="panel">
           <div className="panelHeader">
             <div>
-              <p className="sectionKicker">PUBLICADOS HÁ ≤24H</p>
-              <h3>Mais vistos entre os recém-publicados</h3>
+              <p className="sectionKicker">≤24H · POR TEMA</p>
+              <h3>Mais vistos sem repetir o mesmo assunto</h3>
             </div>
-            <span className="panelHint">total atual de views · não é delta de 24h</span>
+            <span className="panelHint">1 vídeo representativo por tema</span>
           </div>
           <div className="videoList">
-            {popularity.publishedLast24h.slice(0, 6).map((video, index) => (
-              <VideoRow key={video.id} video={video} rank={index + 1} mode="views" />
+            {popularity.publishedLast24hByTopic.slice(0, 6).map((item, index) => (
+              <RepresentativeRow key={item.topicKey} item={item} rank={index + 1} mode="views" />
             ))}
-            {!popularity.publishedLast24h.length ? <p className="emptyState">Sem itens elegíveis nesta leitura.</p> : null}
+            {!popularity.publishedLast24hByTopic.length ? <p className="emptyState">Sem temas elegíveis nesta leitura.</p> : null}
           </div>
         </article>
       </section>
 
       <section className="growthPanel">
         <div>
-          <p className="sectionKicker">PRÓXIMA MEDIDA</p>
-          <h3>Aceleração observada, não apenas momentum</h3>
+          <p className="sectionKicker">LEITURA DA CONCENTRAÇÃO</p>
+          <h3>Homogeneidade alta significa menos diversidade de oportunidade</h3>
           <p>
-            O Neon já está conectado. O próximo passo é persistir snapshots de vídeos, canais e temas em intervalos
-            regulares. Com isso, o sistema poderá distinguir crescimento linear de aceleração real e detectar a
-            passagem entre emergência, pré-tendência, aceleração, pico e saturação.
+            Um índice próximo de 100 indica que os vídeos líderes estão convergindo para o mesmo núcleo temático.
+            Isso evita interpretar dez variações de GTA VI como dez oportunidades independentes. O sistema passa a
+            tratá-las como uma única narrativa dominante e preserva espaço visual para temas diferentes.
           </p>
         </div>
         <div className="baselineMeter">
-          <span>Estado</span>
-          <strong>BASELINE TEMPORAL</strong>
-          <small>infraestrutura conectada</small>
+          <span>Homogeneidade</span>
+          <strong>{homogeneity.index}/100 · {homogeneity.interpretation}</strong>
+          <small>{homogeneity.videoCount} vídeos · {homogeneity.pairCount} pares comparados</small>
         </div>
       </section>
 
@@ -305,7 +344,7 @@ export default async function Home() {
         <span>Fonte atual: YouTube Data API v3</span>
         <span>Região: Brasil</span>
         <span>Cache de coleta: 1 hora</span>
-        <span>Aceleração atual: proxy de momentum</span>
+        <span>Homogeneidade: sigmoid-saturation-v1</span>
       </footer>
     </main>
   );
