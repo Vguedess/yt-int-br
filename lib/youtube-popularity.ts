@@ -7,6 +7,8 @@ import {
   type TopicPulse,
   type TopicRepresentative
 } from '@/lib/topic-intelligence';
+import { getSocialBladeGrowthLeader, type SocialBladeGrowthLeader } from '@/lib/db';
+import { isSocialBladeConfigured } from '@/lib/socialblade';
 
 const YOUTUBE_API_ROOT = 'https://www.googleapis.com/youtube/v3';
 const REGION = 'BR';
@@ -99,8 +101,8 @@ export type CurrentPopularitySnapshot = {
   topics: TopicPulse[];
   acceleratingTopics: TopicPulse[];
   homogeneity: RankingHomogeneity;
-  channelGrowth24h: null;
-  channelGrowthStatus: 'baseline-required';
+  channelGrowth24h: SocialBladeGrowthLeader | null;
+  channelGrowthStatus: 'socialblade' | 'awaiting-socialblade-sync' | 'socialblade-not-configured';
   excludedCount: number;
   error?: string;
 };
@@ -329,6 +331,7 @@ export async function getCurrentPopularity(): Promise<CurrentPopularitySnapshot>
       .filter((topic) => topic.stage === 'ACELERAÇÃO' || topic.stage === 'DOMINANTE')
       .sort((a, b) => b.momentumScore - a.momentumScore)
       .slice(0, 6);
+    const channelGrowth24h = await getSocialBladeGrowthLeader(topicInput.map((video) => video.channelId));
 
     return {
       ok: true,
@@ -344,8 +347,12 @@ export async function getCurrentPopularity(): Promise<CurrentPopularitySnapshot>
       topics: topics.slice(0, 8),
       acceleratingTopics,
       homogeneity,
-      channelGrowth24h: null,
-      channelGrowthStatus: 'baseline-required',
+      channelGrowth24h,
+      channelGrowthStatus: channelGrowth24h
+        ? 'socialblade'
+        : isSocialBladeConfigured()
+          ? 'awaiting-socialblade-sync'
+          : 'socialblade-not-configured',
       excludedCount: mostPopular.excludedCount + searchLast24h.excludedCount
     };
   } catch (error) {
@@ -364,7 +371,7 @@ export async function getCurrentPopularity(): Promise<CurrentPopularitySnapshot>
       acceleratingTopics: [],
       homogeneity: calculateRankingHomogeneity([]),
       channelGrowth24h: null,
-      channelGrowthStatus: 'baseline-required',
+      channelGrowthStatus: isSocialBladeConfigured() ? 'awaiting-socialblade-sync' : 'socialblade-not-configured',
       excludedCount: 0,
       error: error instanceof Error ? error.message : 'Unknown popularity collector error'
     };
