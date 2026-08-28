@@ -1,4 +1,5 @@
 import { evaluateContentEligibility } from '@/lib/content-policy';
+import { buildTopicPulses, type TopicPulse } from '@/lib/topic-intelligence';
 
 const YOUTUBE_API_ROOT = 'https://www.googleapis.com/youtube/v3';
 const REGION = 'BR';
@@ -86,6 +87,8 @@ export type CurrentPopularitySnapshot = {
   mostPopular: PopularVideo[];
   publishedLast24h: PopularVideo[];
   publishedLast24hBasis: 'youtube-search-plus-current-chart';
+  topics: TopicPulse[];
+  acceleratingTopics: TopicPulse[];
   channelGrowth24h: null;
   channelGrowthStatus: 'baseline-required';
   excludedCount: number;
@@ -309,6 +312,13 @@ export async function getCurrentPopularity(): Promise<CurrentPopularitySnapshot>
       .filter((video) => video.ageHours <= 24)
       .sort((a, b) => b.views - a.views);
 
+    const topicInput = mergeUniqueVideos(mostPopular.items, publishedLast24h);
+    const topics = buildTopicPulses(topicInput);
+    const acceleratingTopics = [...topics]
+      .filter((topic) => topic.stage === 'ACELERAÇÃO' || topic.stage === 'DOMINANTE')
+      .sort((a, b) => b.momentumScore - a.momentumScore)
+      .slice(0, 6);
+
     return {
       ok: true,
       generatedAt,
@@ -318,6 +328,8 @@ export async function getCurrentPopularity(): Promise<CurrentPopularitySnapshot>
       mostPopular: mostPopular.items.slice(0, 8),
       publishedLast24h: publishedLast24h.slice(0, 8),
       publishedLast24hBasis: 'youtube-search-plus-current-chart',
+      topics: topics.slice(0, 8),
+      acceleratingTopics,
       channelGrowth24h: null,
       channelGrowthStatus: 'baseline-required',
       excludedCount: mostPopular.excludedCount + searchLast24h.excludedCount
@@ -332,6 +344,8 @@ export async function getCurrentPopularity(): Promise<CurrentPopularitySnapshot>
       mostPopular: [],
       publishedLast24h: [],
       publishedLast24hBasis: 'youtube-search-plus-current-chart',
+      topics: [],
+      acceleratingTopics: [],
       channelGrowth24h: null,
       channelGrowthStatus: 'baseline-required',
       excludedCount: 0,
