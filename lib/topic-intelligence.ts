@@ -198,7 +198,7 @@ export function buildTopicPulses(videos: PopularVideo[]): TopicPulse[] {
       label: topic.label,
       stage,
       videoCount: topic.videoCount,
-      channelCount,
+      channelCount: topic.channelCount,
       totalViews: topic.totalViews,
       totalViewsPerHour: topic.totalViewsPerHour,
       averageHype: Math.round(topic.averageHype),
