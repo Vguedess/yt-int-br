@@ -14,6 +14,16 @@ const YOUTUBE_API_ROOT = 'https://www.googleapis.com/youtube/v3';
 const REGION = 'BR';
 const LANGUAGE = 'pt';
 const CACHE_SECONDS = 60 * 60;
+const MACRO_CACHE_SECONDS = 3 * 60 * 60;
+const MACRO_WINDOW_HOURS = 72;
+
+export type MacroCategoryKey = 'politica' | 'economia' | 'entretenimento';
+
+const MACRO_CATEGORIES: Array<{ key: MacroCategoryKey; label: string; topicId: string }> = [
+  { key: 'politica', label: 'Política', topicId: '/m/05qt0' },
+  { key: 'economia', label: 'Economia', topicId: '/m/09s1f' },
+  { key: 'entretenimento', label: 'Entretenimento', topicId: '/m/02jjt' }
+];
 
 type YouTubeThumbnail = {
   url?: string;
@@ -87,12 +97,28 @@ export type PopularVideo = {
   hypeScore: number;
 };
 
+export type MacroRadar = {
+  key: MacroCategoryKey;
+  label: string;
+  topicId: string;
+  windowHours: number;
+  candidateCount: number;
+  videoCount: number;
+  channelCount: number;
+  totalViews: number;
+  totalViewsPerHour: number;
+  averageEngagementRate: number;
+  videos: PopularVideo[];
+  error?: string;
+};
+
 export type CurrentPopularitySnapshot = {
   ok: boolean;
   generatedAt: string;
   region: 'BR';
   filterVersion: '2026-08-19.2';
   source: 'youtube-data-api-v3';
+  macroRadars: MacroRadar[];
   mostPopular: PopularVideo[];
   mostPopularByTopic: TopicRepresentative[];
   publishedLast24h: PopularVideo[];
@@ -130,7 +156,11 @@ function bestThumbnail(thumbnails: Record<string, YouTubeThumbnail> | undefined)
   return thumbnails?.maxres?.url ?? thumbnails?.standard?.url ?? thumbnails?.high?.url ?? thumbnails?.medium?.url ?? thumbnails?.default?.url;
 }
 
-async function youtubeFetch<T>(resource: string, params: Record<string, string>): Promise<T> {
+async function youtubeFetch<T>(
+  resource: string,
+  params: Record<string, string>,
+  revalidateSeconds: number = CACHE_SECONDS
+): Promise<T> {
   const key = process.env.YOUTUBE_API_KEY;
   if (!key) {
     throw new Error('YOUTUBE_API_KEY is not configured');
@@ -142,7 +172,7 @@ async function youtubeFetch<T>(resource: string, params: Record<string, string>)
   }
 
   const response = await fetch(url, {
-    next: { revalidate: CACHE_SECONDS },
+    next: { revalidate: revalidateSeconds },
     headers: { Accept: 'application/json' }
   });
 
@@ -251,7 +281,10 @@ function mergeUniqueVideos(...groups: PopularVideo[][]): PopularVideo[] {
   return [...byId.values()];
 }
 
-async function hydrateVideos(videoIds: string[]): Promise<{ items: PopularVideo[]; excludedCount: number }> {
+async function hydrateVideos(
+  videoIds: string[],
+  revalidateSeconds: number = CACHE_SECONDS
+): Promise<{ items: PopularVideo[]; excludedCount: number }> {
   const unique = [...new Set(videoIds.filter(Boolean))].slice(0, 50);
   if (!unique.length) return { items: [], excludedCount: 0 };
 
@@ -259,7 +292,7 @@ async function hydrateVideos(videoIds: string[]): Promise<{ items: PopularVideo[
     part: 'snippet,contentDetails,statistics,status',
     id: unique.join(','),
     maxResults: '50'
-  });
+  }, revalidateSeconds);
   const videos = videoResponse.items ?? [];
   const channels = await getChannels(videos.map((video) => video.snippet?.channelId ?? ''));
   const eligible = videos
@@ -270,6 +303,63 @@ async function hydrateVideos(videoIds: string[]): Promise<{ items: PopularVideo[
     items: applyRelativeHypeScore(eligible),
     excludedCount: Math.max(0, videos.length - eligible.length)
   };
+}
+
+async function getMacroRadar(category: { key: MacroCategoryKey; label: string; topicId: string }): Promise<MacroRadar> {
+  try {
+    const publishedAfter = new Date(Date.now() - MACRO_WINDOW_HOURS * 60 * 60 * 1000).toISOString();
+    const response = await youtubeFetch<YouTubeListResponse<{ id?: { videoId?: string } }>>('search', {
+      part: 'snippet',
+      type: 'video',
+      order: 'viewCount',
+      publishedAfter,
+      regionCode: REGION,
+      relevanceLanguage: LANGUAGE,
+      safeSearch: 'moderate',
+      topicId: category.topicId,
+      maxResults: '50'
+    }, MACRO_CACHE_SECONDS);
+
+    const ids = (response.items ?? []).map((item) => item.id?.videoId ?? '').filter(Boolean);
+    const hydrated = await hydrateVideos(ids, MACRO_CACHE_SECONDS);
+    const videos = hydrated.items
+      .sort((a, b) => b.hypeScore - a.hypeScore || b.viewsPerHour - a.viewsPerHour || b.views - a.views)
+      .slice(0, 12);
+    const totalViews = videos.reduce((sum, video) => sum + video.views, 0);
+    const totalViewsPerHour = videos.reduce((sum, video) => sum + video.viewsPerHour, 0);
+    const averageEngagementRate = videos.length
+      ? videos.reduce((sum, video) => sum + video.engagementRate, 0) / videos.length
+      : 0;
+
+    return {
+      key: category.key,
+      label: category.label,
+      topicId: category.topicId,
+      windowHours: MACRO_WINDOW_HOURS,
+      candidateCount: ids.length,
+      videoCount: videos.length,
+      channelCount: new Set(videos.map((video) => video.channelId)).size,
+      totalViews,
+      totalViewsPerHour,
+      averageEngagementRate,
+      videos
+    };
+  } catch (error) {
+    return {
+      key: category.key,
+      label: category.label,
+      topicId: category.topicId,
+      windowHours: MACRO_WINDOW_HOURS,
+      candidateCount: 0,
+      videoCount: 0,
+      channelCount: 0,
+      totalViews: 0,
+      totalViewsPerHour: 0,
+      averageEngagementRate: 0,
+      videos: [],
+      error: error instanceof Error ? error.message : 'Unknown macro radar error'
+    };
+  }
 }
 
 async function getMostPopular(): Promise<{ items: PopularVideo[]; excludedCount: number }> {
@@ -314,9 +404,10 @@ async function getPublishedLast24h(): Promise<{ items: PopularVideo[]; excludedC
 export async function getCurrentPopularity(): Promise<CurrentPopularitySnapshot> {
   const generatedAt = new Date().toISOString();
   try {
-    const [mostPopular, searchLast24h] = await Promise.all([
+    const [mostPopular, searchLast24h, ...macroRadars] = await Promise.all([
       getMostPopular(),
-      getPublishedLast24h()
+      getPublishedLast24h(),
+      ...MACRO_CATEGORIES.map((category) => getMacroRadar(category))
     ]);
 
     const recentFromCurrentChart = mostPopular.items.filter((video) => video.ageHours <= 24);
@@ -339,6 +430,7 @@ export async function getCurrentPopularity(): Promise<CurrentPopularitySnapshot>
       region: REGION,
       filterVersion: '2026-08-19.2',
       source: 'youtube-data-api-v3',
+      macroRadars,
       mostPopular: mostPopular.items.slice(0, 8),
       mostPopularByTopic: diversifyVideosByTopic(mostPopular.items, 'hype').slice(0, 6),
       publishedLast24h: publishedLast24h.slice(0, 8),
@@ -362,6 +454,19 @@ export async function getCurrentPopularity(): Promise<CurrentPopularitySnapshot>
       region: REGION,
       filterVersion: '2026-08-19.2',
       source: 'youtube-data-api-v3',
+      macroRadars: MACRO_CATEGORIES.map((category) => ({
+        key: category.key,
+        label: category.label,
+        topicId: category.topicId,
+        windowHours: MACRO_WINDOW_HOURS,
+        candidateCount: 0,
+        videoCount: 0,
+        channelCount: 0,
+        totalViews: 0,
+        totalViewsPerHour: 0,
+        averageEngagementRate: 0,
+        videos: []
+      })),
       mostPopular: [],
       mostPopularByTopic: [],
       publishedLast24h: [],
