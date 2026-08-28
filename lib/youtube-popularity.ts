@@ -1,5 +1,12 @@
 import { evaluateContentEligibility } from '@/lib/content-policy';
-import { buildTopicPulses, type TopicPulse } from '@/lib/topic-intelligence';
+import {
+  buildTopicPulses,
+  calculateRankingHomogeneity,
+  diversifyVideosByTopic,
+  type RankingHomogeneity,
+  type TopicPulse,
+  type TopicRepresentative
+} from '@/lib/topic-intelligence';
 
 const YOUTUBE_API_ROOT = 'https://www.googleapis.com/youtube/v3';
 const REGION = 'BR';
@@ -85,10 +92,13 @@ export type CurrentPopularitySnapshot = {
   filterVersion: '2026-08-19.2';
   source: 'youtube-data-api-v3';
   mostPopular: PopularVideo[];
+  mostPopularByTopic: TopicRepresentative[];
   publishedLast24h: PopularVideo[];
+  publishedLast24hByTopic: TopicRepresentative[];
   publishedLast24hBasis: 'youtube-search-plus-current-chart';
   topics: TopicPulse[];
   acceleratingTopics: TopicPulse[];
+  homogeneity: RankingHomogeneity;
   channelGrowth24h: null;
   channelGrowthStatus: 'baseline-required';
   excludedCount: number;
@@ -314,6 +324,7 @@ export async function getCurrentPopularity(): Promise<CurrentPopularitySnapshot>
 
     const topicInput = mergeUniqueVideos(mostPopular.items, publishedLast24h);
     const topics = buildTopicPulses(topicInput);
+    const homogeneity = calculateRankingHomogeneity(topicInput);
     const acceleratingTopics = [...topics]
       .filter((topic) => topic.stage === 'ACELERAÇÃO' || topic.stage === 'DOMINANTE')
       .sort((a, b) => b.momentumScore - a.momentumScore)
@@ -326,10 +337,13 @@ export async function getCurrentPopularity(): Promise<CurrentPopularitySnapshot>
       filterVersion: '2026-08-19.2',
       source: 'youtube-data-api-v3',
       mostPopular: mostPopular.items.slice(0, 8),
+      mostPopularByTopic: diversifyVideosByTopic(mostPopular.items, 'hype').slice(0, 6),
       publishedLast24h: publishedLast24h.slice(0, 8),
+      publishedLast24hByTopic: diversifyVideosByTopic(publishedLast24h, 'views').slice(0, 6),
       publishedLast24hBasis: 'youtube-search-plus-current-chart',
       topics: topics.slice(0, 8),
       acceleratingTopics,
+      homogeneity,
       channelGrowth24h: null,
       channelGrowthStatus: 'baseline-required',
       excludedCount: mostPopular.excludedCount + searchLast24h.excludedCount
@@ -342,10 +356,13 @@ export async function getCurrentPopularity(): Promise<CurrentPopularitySnapshot>
       filterVersion: '2026-08-19.2',
       source: 'youtube-data-api-v3',
       mostPopular: [],
+      mostPopularByTopic: [],
       publishedLast24h: [],
+      publishedLast24hByTopic: [],
       publishedLast24hBasis: 'youtube-search-plus-current-chart',
       topics: [],
       acceleratingTopics: [],
+      homogeneity: calculateRankingHomogeneity([]),
       channelGrowth24h: null,
       channelGrowthStatus: 'baseline-required',
       excludedCount: 0,
