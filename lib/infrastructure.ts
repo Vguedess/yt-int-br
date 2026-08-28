@@ -20,6 +20,7 @@ export const providerConfig = {
   youtube: Boolean(process.env.YOUTUBE_API_KEY),
   openai: Boolean(process.env.OPENAI_API_KEY),
   postgres: Boolean(process.env.DATABASE_URL),
+  socialblade: Boolean(process.env.SOCIALBLADE_CLIENT_ID && process.env.SOCIALBLADE_TOKEN),
   neo4j: Boolean(process.env.NEO4J_URI),
   reddit: Boolean(process.env.REDDIT_CLIENT_ID),
   news: Boolean(process.env.NEWS_API_KEY)
