@@ -1,6 +1,6 @@
 import { getCurrentPopularity } from '@/lib/youtube-popularity';
 
-export const revalidate = 3600;
+export const dynamic = 'force-dynamic';
 
 export async function GET() {
   const snapshot = await getCurrentPopularity();
