@@ -1,7 +1,7 @@
 import Image from 'next/image';
 import { getCurrentPopularity, type MacroRadar, type PopularVideo } from '@/lib/youtube-popularity';
 
-export const revalidate = 3600;
+export const dynamic = 'force-dynamic';
 
 const compactNumber = new Intl.NumberFormat('pt-BR', {
   notation: 'compact',
