@@ -27,6 +27,14 @@ function formatPercent(value: number): string {
   return `${(value * 100).toFixed(value < 0.01 ? 1 : 0)}%`;
 }
 
+function nodeTierLabel(video: PopularVideo): string {
+  if (video.nodeTier === 'PERIPHERAL') return '≤1M · periférico';
+  if (video.nodeTier === 'MEDIUM') return '1–5M · médio';
+  if (video.nodeTier === 'LARGE') return '5–15M · grande';
+  if (video.nodeTier === 'HUB') return '>15M · hub';
+  return 'nó desconhecido';
+}
+
 function VideoRow({ video, rank }: { video: PopularVideo; rank: number }) {
   return (
     <a className="videoRow" href={`https://www.youtube.com/watch?v=${video.id}`} target="_blank" rel="noreferrer">
@@ -45,6 +53,10 @@ function VideoRow({ video, rank }: { video: PopularVideo; rank: number }) {
           <span>{video.ageHours.toFixed(video.ageHours < 10 ? 1 : 0)}h no ar</span>
           <span>{formatDuration(video.durationSeconds)}</span>
           <span>{formatPercent(video.engagementRate)} eng.</span>
+          <span>{nodeTierLabel(video)}</span>
+          <span>Escape {video.networkEscape.toFixed(video.networkEscape >= 10 ? 0 : 1)}x</span>
+          <span>Breakout {video.breakoutStrength}</span>
+          <span>Força viral {video.viralForce}</span>
         </div>
       </div>
       <div className="scoreBadge">
@@ -88,6 +100,9 @@ export default async function Home() {
   const totalMacroVideos = radars.reduce((sum, radar) => sum + radar.videoCount, 0);
   const totalMacroChannels = new Set(radars.flatMap((radar) => radar.videos.map((video) => video.channelId))).size;
   const strongestRadar = [...radars].sort((a, b) => b.totalViewsPerHour - a.totalViewsPerHour)[0];
+  const diffusionSignals = radars
+    .flatMap((radar) => radar.diffusionSignals.map((signal) => ({ ...signal, categoryLabel: radar.label })))
+    .sort((a, b) => b.opportunityScore - a.opportunityScore || b.peripheralBreakout - a.peripheralBreakout);
 
   return (
     <main className="dashboardPage">
@@ -110,10 +125,9 @@ export default async function Home() {
           <p className="sectionKicker">DESCOBERTA MACRO</p>
           <h2>Primeiro descobrir quais vídeos estão em alta dentro de cada grande assunto.</h2>
           <p className="sectionIntro">
-            Política, Economia e Entretenimento são observados separadamente. O objetivo desta camada não é explicar
-            ainda por que um vídeo venceu, mas identificar corretamente os vídeos que merecem uma investigação mais
-            profunda. O Hype Score é relativo ao próprio universo temático, evitando comparar política com games,
-            música ou entretenimento.
+            Política, Economia e Entretenimento são observados separadamente. O ranking agora considera a topologia da
+            rede: um vídeo que rompe o alcance esperado de um canal periférico recebe um sinal diferente de um vídeo que
+            nasce dentro de um hub com grande distribuição inicial.
           </p>
         </div>
         <div className="filterBadge">Long-form · Brasil · ≥8 min</div>
@@ -123,17 +137,17 @@ export default async function Home() {
         <article className="statCard accentCard">
           <span>Política · líder atual</span>
           <strong className="topicHeroValue">{politica?.videos[0]?.channelTitle ?? '—'}</strong>
-          <p>{politica?.videos[0] ? `${compactNumber.format(politica.videos[0].views)} views · Hype ${politica.videos[0].hypeScore}` : 'Sem leitura disponível'}</p>
+          <p>{politica?.videos[0] ? `${compactNumber.format(politica.videos[0].views)} views · Hype ${politica.videos[0].hypeScore} · Escape ${politica.videos[0].networkEscape.toFixed(1)}x` : 'Sem leitura disponível'}</p>
         </article>
         <article className="statCard momentumCard">
           <span>Economia · líder atual</span>
           <strong className="topicHeroValue">{economia?.videos[0]?.channelTitle ?? '—'}</strong>
-          <p>{economia?.videos[0] ? `${compactNumber.format(economia.videos[0].views)} views · Hype ${economia.videos[0].hypeScore}` : 'Sem leitura disponível'}</p>
+          <p>{economia?.videos[0] ? `${compactNumber.format(economia.videos[0].views)} views · Hype ${economia.videos[0].hypeScore} · Escape ${economia.videos[0].networkEscape.toFixed(1)}x` : 'Sem leitura disponível'}</p>
         </article>
         <article className="statCard">
           <span>Entretenimento · líder atual</span>
           <strong className="topicHeroValue">{entretenimento?.videos[0]?.channelTitle ?? '—'}</strong>
-          <p>{entretenimento?.videos[0] ? `${compactNumber.format(entretenimento.videos[0].views)} views · Hype ${entretenimento.videos[0].hypeScore}` : 'Sem leitura disponível'}</p>
+          <p>{entretenimento?.videos[0] ? `${compactNumber.format(entretenimento.videos[0].views)} views · Hype ${entretenimento.videos[0].hypeScore} · Escape ${entretenimento.videos[0].networkEscape.toFixed(1)}x` : 'Sem leitura disponível'}</p>
         </article>
         <article className="statCard">
           <span>Universo macro observado</span>
@@ -163,10 +177,43 @@ export default async function Home() {
         </div>
 
         <p className="methodNote">
-          O ranking começa com até 50 candidatos recentes associados ao tópico oficial do YouTube para cada universo.
-          Depois do filtro global, o Hype Score é calculado apenas entre os vídeos daquele universo usando velocidade de
-          views, engajamento e recência. Views/h ainda é uma aproximação baseada em views acumuladas e idade do vídeo;
-          com snapshots no Neon ela será substituída por velocidade temporal observada.
+          O Hype usa o modelo {popularity.networkModelVersion}. O alcance esperado é estimado dentro do próprio cohort
+          por tamanho do canal e idade do vídeo; o Network Escape mede o quanto a performance observada rompe essa
+          expectativa. Quando houver histórico suficiente do mesmo canal no Neon, a linha de base histórica substituirá
+          progressivamente o prior cross-sectional. Views/h continua sendo um proxy acumulado até termos deltas temporais.
+        </p>
+      </section>
+
+      <section className="futureSection">
+        <div className="futureHeading">
+          <div>
+            <p className="sectionKicker futureKicker">DIFUSÃO EM REDE</p>
+            <h2>Encontrar assuntos que rompem a periferia antes de saturarem os hubs</h2>
+          </div>
+          <span>Peripheral Breakout · Hub Penetration</span>
+        </div>
+        <div className="futureGrid">
+          {diffusionSignals.slice(0, 3).map((signal, index) => (
+            <article key={`${signal.categoryLabel}-${signal.topicKey}`}>
+              <span>{(index + 1).toString().padStart(2, '0')}</span>
+              <strong>{signal.topicLabel}</strong>
+              <p>
+                {signal.categoryLabel} · {signal.stage} · oportunidade {signal.opportunityScore} · breakout periférico {signal.peripheralBreakout} · hubs {signal.hubPenetration}%
+              </p>
+            </article>
+          ))}
+          {!diffusionSignals.length ? (
+            <article>
+              <span>—</span>
+              <strong>Coletando sinais</strong>
+              <p>A difusão aparece quando há vídeos suficientes em diferentes tiers de canais.</p>
+            </article>
+          ) : null}
+        </div>
+        <p className="methodNote">
+          O estágio de difusão ainda é um proxy cross-sectional: ele compara breakout de nós periféricos e médios com a
+          penetração em canais grandes e hubs no mesmo recorte. O histórico persistido permitirá medir a passagem real
+          PERIFERIA → MÉDIOS → GRANDES → HUBS ao longo do tempo.
         </p>
       </section>
 
@@ -183,8 +230,8 @@ export default async function Home() {
         </div>
         <div className="baselineMeter">
           <span>Ordem do sistema</span>
-          <strong>MACRO → SELEÇÃO → ANÁLISE</strong>
-          <small>descobrir primeiro · explicar depois</small>
+          <strong>MACRO → REDE → SELEÇÃO → ANÁLISE</strong>
+          <small>descobrir primeiro · medir propagação · explicar depois</small>
         </div>
       </section>
 
@@ -199,24 +246,25 @@ export default async function Home() {
         <div className="futureGrid">
           <article>
             <span>01</span>
-            <strong>Descoberta</strong>
-            <p>Encontrar os vídeos líderes em Política, Economia e Entretenimento sem misturar universos.</p>
+            <strong>Node baseline</strong>
+            <p>Aprender a distribuição normal de cada canal por idade do vídeo, em vez de depender apenas de inscritos.</p>
           </article>
           <article>
             <span>02</span>
-            <strong>Histórico</strong>
-            <p>Registrar views, likes e comentários dos candidatos ao longo do tempo no nosso próprio banco.</p>
+            <strong>Network Escape</strong>
+            <p>Registrar quando um vídeo ultrapassa progressivamente a audiência natural do nó que o publicou.</p>
           </article>
           <article>
             <span>03</span>
-            <strong>Aceleração</strong>
-            <p>Medir quais vídeos e subtemas estão acelerando de verdade, e não apenas acumulando views.</p>
+            <strong>Propagação</strong>
+            <p>Observar temas saindo de canais periféricos, chegando aos médios e finalmente penetrando os grandes hubs.</p>
           </article>
         </div>
       </section>
 
       <footer className="footerNote">
         <span>Fonte: YouTube Data API v3</span>
+        <span>Modelo: {popularity.networkModelVersion}</span>
         <span>Universos: Politics · Business · Entertainment</span>
         <span>Região: Brasil</span>
         <span>Janela macro: 72 horas</span>
