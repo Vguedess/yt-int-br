@@ -7,6 +7,12 @@ import {
   type TopicPulse,
   type TopicRepresentative
 } from '@/lib/topic-intelligence';
+import {
+  NETWORK_BREAKOUT_MODEL_VERSION,
+  scoreNetworkBreakoutCohort,
+  type NetworkBreakoutMetrics
+} from '@/lib/network-diffusion';
+import { buildTopicDiffusionSignals, type TopicDiffusionSignal } from '@/lib/topic-diffusion';
 import { getSocialBladeGrowthLeader, type SocialBladeGrowthLeader } from '@/lib/db';
 import { isSocialBladeConfigured } from '@/lib/socialblade';
 
@@ -79,7 +85,7 @@ type YouTubeListResponse<T> = {
   items?: T[];
 };
 
-export type PopularVideo = {
+type BasePopularVideo = {
   id: string;
   title: string;
   channelId: string;
@@ -94,8 +100,11 @@ export type PopularVideo = {
   ageHours: number;
   viewsPerHour: number;
   engagementRate: number;
-  hypeScore: number;
 };
+
+export type PopularVideo = BasePopularVideo & NetworkBreakoutMetrics;
+
+type UnscoredPopularVideo = BasePopularVideo;
 
 export type MacroRadar = {
   key: MacroCategoryKey;
@@ -109,6 +118,7 @@ export type MacroRadar = {
   totalViewsPerHour: number;
   averageEngagementRate: number;
   videos: PopularVideo[];
+  diffusionSignals: TopicDiffusionSignal[];
   error?: string;
 };
 
@@ -116,8 +126,9 @@ export type CurrentPopularitySnapshot = {
   ok: boolean;
   generatedAt: string;
   region: 'BR';
-  filterVersion: '2026-08-19.2';
+  filterVersion: '2026-09-02.1';
   source: 'youtube-data-api-v3';
+  networkModelVersion: typeof NETWORK_BREAKOUT_MODEL_VERSION;
   macroRadars: MacroRadar[];
   mostPopular: PopularVideo[];
   mostPopularByTopic: TopicRepresentative[];
@@ -197,7 +208,7 @@ async function getChannels(channelIds: string[]): Promise<Map<string, YouTubeCha
   return new Map((response.items ?? []).filter((item) => item.id).map((item) => [item.id!, item]));
 }
 
-function toPopularVideo(video: YouTubeVideo, channel: YouTubeChannel | undefined): PopularVideo | null {
+function toPopularVideo(video: YouTubeVideo, channel: YouTubeChannel | undefined): UnscoredPopularVideo | null {
   const id = video.id;
   const title = video.snippet?.title;
   const channelId = video.snippet?.channelId;
@@ -248,26 +259,26 @@ function toPopularVideo(video: YouTubeVideo, channel: YouTubeChannel | undefined
     subscribers,
     ageHours,
     viewsPerHour,
-    engagementRate,
-    hypeScore: 0
+    engagementRate
   };
 }
 
-function applyRelativeHypeScore(items: PopularVideo[]): PopularVideo[] {
+function applyNetworkAwareScoring(items: UnscoredPopularVideo[]): PopularVideo[] {
   if (!items.length) return [];
-  const raw = items.map((item) => {
-    const velocity = Math.log10(item.viewsPerHour + 1);
-    const engagement = Math.min(item.engagementRate, 0.12) * 16;
-    const recency = 1 / Math.sqrt(Math.max(item.ageHours, 1) / 12);
-    return velocity * 1.8 + engagement + recency;
-  });
-  const min = Math.min(...raw);
-  const max = Math.max(...raw);
+  const metrics = scoreNetworkBreakoutCohort(items.map((item) => ({
+    id: item.id,
+    views: item.views,
+    subscribers: item.subscribers,
+    ageHours: item.ageHours,
+    viewsPerHour: item.viewsPerHour,
+    engagementRate: item.engagementRate
+  })));
 
-  return items.map((item, index) => ({
-    ...item,
-    hypeScore: max === min ? 100 : Math.round(55 + ((raw[index] - min) / (max - min)) * 45)
-  }));
+  return items.map((item) => {
+    const breakout = metrics.get(item.id);
+    if (!breakout) throw new Error(`Missing network breakout metrics for video ${item.id}`);
+    return { ...item, ...breakout };
+  });
 }
 
 function mergeUniqueVideos(...groups: PopularVideo[][]): PopularVideo[] {
@@ -297,10 +308,10 @@ async function hydrateVideos(
   const channels = await getChannels(videos.map((video) => video.snippet?.channelId ?? ''));
   const eligible = videos
     .map((video) => toPopularVideo(video, channels.get(video.snippet?.channelId ?? '')))
-    .filter((item): item is PopularVideo => Boolean(item));
+    .filter((item): item is UnscoredPopularVideo => Boolean(item));
 
   return {
-    items: applyRelativeHypeScore(eligible),
+    items: applyNetworkAwareScoring(eligible),
     excludedCount: Math.max(0, videos.length - eligible.length)
   };
 }
@@ -322,9 +333,10 @@ async function getMacroRadar(category: { key: MacroCategoryKey; label: string; t
 
     const ids = (response.items ?? []).map((item) => item.id?.videoId ?? '').filter(Boolean);
     const hydrated = await hydrateVideos(ids, MACRO_CACHE_SECONDS);
-    const videos = hydrated.items
-      .sort((a, b) => b.hypeScore - a.hypeScore || b.viewsPerHour - a.viewsPerHour || b.views - a.views)
-      .slice(0, 12);
+    const ranked = hydrated.items
+      .sort((a, b) => b.hypeScore - a.hypeScore || b.viralForce - a.viralForce || b.viewsPerHour - a.viewsPerHour || b.views - a.views);
+    const diffusionSignals = buildTopicDiffusionSignals(ranked);
+    const videos = ranked.slice(0, 12);
     const totalViews = videos.reduce((sum, video) => sum + video.views, 0);
     const totalViewsPerHour = videos.reduce((sum, video) => sum + video.viewsPerHour, 0);
     const averageEngagementRate = videos.length
@@ -342,7 +354,8 @@ async function getMacroRadar(category: { key: MacroCategoryKey; label: string; t
       totalViews,
       totalViewsPerHour,
       averageEngagementRate,
-      videos
+      videos,
+      diffusionSignals
     };
   } catch (error) {
     return {
@@ -357,6 +370,7 @@ async function getMacroRadar(category: { key: MacroCategoryKey; label: string; t
       totalViewsPerHour: 0,
       averageEngagementRate: 0,
       videos: [],
+      diffusionSignals: [],
       error: error instanceof Error ? error.message : 'Unknown macro radar error'
     };
   }
@@ -374,10 +388,10 @@ async function getMostPopular(): Promise<{ items: PopularVideo[]; excludedCount:
   const channels = await getChannels(videos.map((video) => video.snippet?.channelId ?? ''));
   const eligible = videos
     .map((video) => toPopularVideo(video, channels.get(video.snippet?.channelId ?? '')))
-    .filter((item): item is PopularVideo => Boolean(item));
+    .filter((item): item is UnscoredPopularVideo => Boolean(item));
 
   return {
-    items: applyRelativeHypeScore(eligible).sort((a, b) => b.hypeScore - a.hypeScore),
+    items: applyNetworkAwareScoring(eligible).sort((a, b) => b.hypeScore - a.hypeScore || b.viralForce - a.viralForce),
     excludedCount: Math.max(0, videos.length - eligible.length)
   };
 }
@@ -428,8 +442,9 @@ export async function getCurrentPopularity(): Promise<CurrentPopularitySnapshot>
       ok: true,
       generatedAt,
       region: REGION,
-      filterVersion: '2026-08-19.2',
+      filterVersion: '2026-09-02.1',
       source: 'youtube-data-api-v3',
+      networkModelVersion: NETWORK_BREAKOUT_MODEL_VERSION,
       macroRadars,
       mostPopular: mostPopular.items.slice(0, 8),
       mostPopularByTopic: diversifyVideosByTopic(mostPopular.items, 'hype').slice(0, 6),
@@ -452,8 +467,9 @@ export async function getCurrentPopularity(): Promise<CurrentPopularitySnapshot>
       ok: false,
       generatedAt,
       region: REGION,
-      filterVersion: '2026-08-19.2',
+      filterVersion: '2026-09-02.1',
       source: 'youtube-data-api-v3',
+      networkModelVersion: NETWORK_BREAKOUT_MODEL_VERSION,
       macroRadars: MACRO_CATEGORIES.map((category) => ({
         key: category.key,
         label: category.label,
@@ -465,7 +481,8 @@ export async function getCurrentPopularity(): Promise<CurrentPopularitySnapshot>
         totalViews: 0,
         totalViewsPerHour: 0,
         averageEngagementRate: 0,
-        videos: []
+        videos: [],
+        diffusionSignals: []
       })),
       mostPopular: [],
       mostPopularByTopic: [],
