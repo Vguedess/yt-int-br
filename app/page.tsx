@@ -2,6 +2,7 @@ import Image from 'next/image';
 import { LeaderRefreshButton } from '@/app/components/LeaderRefreshButton';
 import styles from '@/app/leaders.module.css';
 import { getLeaderDashboard } from '@/lib/youtube-category-leader-service';
+import { getHypeDashboard, type HypeVideoCard } from '@/lib/youtube-hype-service';
 import type { CategoryLeader, LeaderCategoryKey } from '@/lib/youtube-category-leaders';
 
 export const dynamic = 'force-dynamic';
@@ -26,7 +27,8 @@ function formatDateTime(value: string): string {
   }).format(new Date(value));
 }
 
-function formatDuration(seconds: number): string {
+function formatDuration(seconds: number | null): string {
+  if (seconds == null) return '—';
   const hours = Math.floor(seconds / 3600);
   const minutes = Math.floor((seconds % 3600) / 60);
   return hours ? `${hours}h ${minutes.toString().padStart(2, '0')}m` : `${minutes} min`;
@@ -90,9 +92,75 @@ function LeaderCard({ leader }: { leader: CategoryLeader }) {
   );
 }
 
+function HypeCard({ video }: { video: HypeVideoCard }) {
+  return (
+    <article className={`${styles.card} ${styles.hypeCard}`}>
+      <a
+        className={styles.cardLink}
+        href={`https://www.youtube.com/watch?v=${video.videoId}`}
+        target="_blank"
+        rel="noreferrer"
+      >
+        <div className={styles.imageWrap}>
+          <Image
+            className={styles.image}
+            src={video.thumbnailUrl}
+            alt={`Thumbnail de ${video.title}`}
+            width={960}
+            height={540}
+            sizes="(max-width: 760px) 100vw, (max-width: 1180px) 50vw, 25vw"
+          />
+          <span className={styles.hypeRank}>HYPE #{video.rank}</span>
+          <span className={styles.hypeScore}>Score {video.hypeScore}</span>
+        </div>
+
+        <div className={styles.cardBody}>
+          <h3>{video.title}</h3>
+
+          <dl className={styles.details}>
+            <div>
+              <dt>Canal</dt>
+              <dd>{video.channelTitle}</dd>
+            </div>
+            <div>
+              <dt>Inscritos</dt>
+              <dd>{video.subscribers == null ? '—' : compactNumber.format(video.subscribers)}</dd>
+            </div>
+            <div>
+              <dt>Duração</dt>
+              <dd>{formatDuration(video.durationSeconds)}</dd>
+            </div>
+            <div>
+              <dt>Views</dt>
+              <dd>{compactNumber.format(video.currentViews)}</dd>
+            </div>
+            <div>
+              <dt>Network Escape</dt>
+              <dd>{video.networkEscape.toFixed(1)}×</dd>
+            </div>
+            <div>
+              <dt>Breakout</dt>
+              <dd>{video.breakoutStrength}/100</dd>
+            </div>
+          </dl>
+
+          <div className={styles.cardFooter}>
+            <span>Força viral {video.viralForce}/100 · nó {video.nodeTier}</span>
+            <span>Snapshot {formatDateTime(video.observedHour)}</span>
+          </div>
+        </div>
+      </a>
+    </article>
+  );
+}
+
 export default async function Home() {
   try {
-    const dashboard = await getLeaderDashboard();
+    const [dashboard, hype] = await Promise.all([
+      getLeaderDashboard(),
+      getHypeDashboard()
+    ]);
+
     const leaderMap = new Map(dashboard.leaders.map((leader) => [leader.categoryKey, leader]));
     const orderedLeaders = CATEGORY_ORDER
       .map((key) => leaderMap.get(key))
@@ -143,6 +211,43 @@ export default async function Home() {
             válido salvo no banco.
           </div>
         ) : null}
+
+        <section className={styles.sectionBlock} aria-labelledby="hype-heading">
+          <div className={styles.sectionHeader}>
+            <div>
+              <p className={styles.eyebrow}>BRASIL · PROPAGAÇÃO ACIMA DO ESPERADO</p>
+              <h2 id="hype-heading">Mais Hypados</h2>
+              <p>
+                Os quatro vídeos com maior Hype Score no último snapshot válido. O score considera força viral,
+                Network Escape, breakout, velocidade, engajamento e dificuldade estrutural do nó/canal.
+              </p>
+            </div>
+            {hype.observedHour ? (
+              <div className={styles.hypeTimestamp}>
+                <strong>Último snapshot de Hype</strong>
+                <span>{formatDateTime(hype.observedHour)}</span>
+              </div>
+            ) : null}
+          </div>
+
+          {hype.videos.length ? (
+            <section className={styles.grid} aria-label="Quatro vídeos mais hypados no mercado brasileiro">
+              {hype.videos.map((video) => <HypeCard key={video.videoId} video={video} />)}
+            </section>
+          ) : (
+            <div className={styles.hypeUnavailable}>
+              Ainda não existe um snapshot de Hype válido no Neon. A descoberta ao vivo está temporariamente limitada pela
+              cota de Search Queries do YouTube; assim que houver uma coleta válida, os quatro cards serão preenchidos sem
+              alterar a interface.
+            </div>
+          )}
+
+          {hype.apiWarning ? (
+            <div className={styles.hypeWarning}>
+              As métricas históricas continuam disponíveis, mas a hidratação atual do YouTube falhou: {hype.apiWarning}
+            </div>
+          ) : null}
+        </section>
 
         <div className={styles.note}>
           <strong>Escopo atual:</strong> mercado YouTube Brasil (`regionCode=BR`) e `relevanceLanguage=pt`. Notícias e
