@@ -2,9 +2,16 @@ import Image from 'next/image';
 import { LeaderRefreshButton } from '@/app/components/LeaderRefreshButton';
 import styles from '@/app/leaders.module.css';
 import { getLeaderDashboard } from '@/lib/youtube-category-leader-service';
-import type { CategoryLeader } from '@/lib/youtube-category-leaders';
+import type { CategoryLeader, LeaderCategoryKey } from '@/lib/youtube-category-leaders';
 
 export const dynamic = 'force-dynamic';
+
+const CATEGORY_ORDER: LeaderCategoryKey[] = [
+  'news-politics',
+  'science-tech',
+  'economia',
+  'entretenimento'
+];
 
 const compactNumber = new Intl.NumberFormat('pt-BR', {
   notation: 'compact',
@@ -25,10 +32,6 @@ function formatDuration(seconds: number): string {
   return hours ? `${hours}h ${minutes.toString().padStart(2, '0')}m` : `${minutes} min`;
 }
 
-function formatPercent(value: number): string {
-  return `${(value * 100).toFixed(1)}%`;
-}
-
 function LeaderCard({ leader }: { leader: CategoryLeader }) {
   return (
     <article className={styles.card}>
@@ -43,42 +46,43 @@ function LeaderCard({ leader }: { leader: CategoryLeader }) {
             <Image
               className={styles.image}
               src={leader.thumbnailUrl}
-              alt=""
+              alt={`Thumbnail de ${leader.title}`}
               width={960}
               height={540}
-              sizes="(max-width: 980px) 100vw, 33vw"
+              sizes="(max-width: 760px) 100vw, (max-width: 1180px) 50vw, 25vw"
               priority
             />
-          ) : null}
+          ) : (
+            <div className={styles.imageFallback}>Sem thumbnail</div>
+          )}
           <span className={styles.category}>{leader.categoryLabel}</span>
         </div>
 
         <div className={styles.cardBody}>
           <h3>{leader.title}</h3>
-          <span className={styles.channel}>{leader.channelTitle}</span>
 
-          <div className={styles.metrics}>
-            <div className={styles.metric}>
-              <span>Views</span>
-              <strong>{compactNumber.format(leader.views)}</strong>
+          <dl className={styles.details}>
+            <div>
+              <dt>Canal</dt>
+              <dd>{leader.channelTitle}</dd>
             </div>
-            <div className={styles.metric}>
-              <span>Views / hora</span>
-              <strong>{compactNumber.format(Math.round(leader.viewsPerHour))}</strong>
+            <div>
+              <dt>Inscritos</dt>
+              <dd>{leader.subscribers == null ? '—' : compactNumber.format(leader.subscribers)}</dd>
             </div>
-            <div className={styles.metric}>
-              <span>Inscritos do canal</span>
-              <strong>{leader.subscribers == null ? '—' : compactNumber.format(leader.subscribers)}</strong>
+            <div>
+              <dt>Duração</dt>
+              <dd>{formatDuration(leader.durationSeconds)}</dd>
             </div>
-            <div className={styles.metric}>
-              <span>Engajamento</span>
-              <strong>{formatPercent(leader.engagementRate)}</strong>
+            <div>
+              <dt>Views</dt>
+              <dd>{compactNumber.format(leader.views)}</dd>
             </div>
-          </div>
+          </dl>
 
           <div className={styles.cardFooter}>
-            <span>publicado {formatDateTime(leader.publishedAt)}</span>
-            <span>{formatDuration(leader.durationSeconds)} · {leader.candidateCount} candidatos</span>
+            <span>Publicado {formatDateTime(leader.publishedAt)}</span>
+            <span>YouTube Brasil · {leader.candidateCount} candidatos</span>
           </div>
         </div>
       </a>
@@ -89,53 +93,66 @@ function LeaderCard({ leader }: { leader: CategoryLeader }) {
 export default async function Home() {
   try {
     const dashboard = await getLeaderDashboard();
-    const missingCategories = ['news-politics', 'economia', 'entretenimento'].filter(
-      (key) => !dashboard.leaders.some((leader) => leader.categoryKey === key)
-    );
+    const leaderMap = new Map(dashboard.leaders.map((leader) => [leader.categoryKey, leader]));
+    const orderedLeaders = CATEGORY_ORDER
+      .map((key) => leaderMap.get(key))
+      .filter((leader): leader is CategoryLeader => Boolean(leader));
+    const missingCategories = CATEGORY_ORDER.filter((key) => !leaderMap.has(key));
 
     return (
       <main className={styles.page}>
         <header className={styles.header}>
           <div>
-            <p className={styles.eyebrow}>YouTube Intelligence Brasil</p>
+            <p className={styles.eyebrow}>YouTube Intelligence</p>
             <h1>Líderes · 24h</h1>
           </div>
-          <div className={styles.status}>
-            <strong>Última coleta válida</strong>
-            <span>{formatDateTime(dashboard.collectedAt)} · Brasil</span>
-            <span>{dashboard.ageHours.toFixed(1)}h desde a atualização</span>
+
+          <div className={styles.headerActions}>
+            <div className={styles.marketSwitch} aria-label="Mercado observado">
+              <span className={styles.marketActive}>Brasil</span>
+              <span className={styles.marketFuture}>Estados Unidos · em breve</span>
+            </div>
+            <div className={styles.status}>
+              <strong>Última coleta válida</strong>
+              <span>{formatDateTime(dashboard.collectedAt)} · mercado BR</span>
+              <span>{dashboard.ageHours.toFixed(1)}h desde a atualização</span>
+            </div>
           </div>
         </header>
 
         <section className={styles.hero}>
           <div>
-            <p className={styles.eyebrow}>VÍDEOS PUBLICADOS NAS ÚLTIMAS 24 HORAS</p>
-            <h2>O vídeo e o canal que lideram cada mercado agora.</h2>
+            <p className={styles.eyebrow}>YOUTUBE BRASIL · VÍDEOS PUBLICADOS NAS ÚLTIMAS 24 HORAS</p>
+            <h2>Um líder por grande mercado.</h2>
             <p>
-              Ranking por total de views entre vídeos long-form elegíveis publicados nas últimas 24h no Brasil.
-              News & Politics usa a categoria 25 do YouTube; Entretenimento usa a categoria 24; Economia usa o tópico
-              Business com termos econômicos em português. O último resultado válido permanece salvo no Neon.
+              Quatro universos independentes: Notícias e Política, Ciência e Tecnologia, Economia / Mercados e
+              Entretenimento. O líder é o vídeo brasileiro long-form com mais views acumuladas entre os candidatos
+              publicados nas últimas 24 horas e encontrados pela pesquisa do YouTube para o Brasil.
             </p>
           </div>
           <LeaderRefreshButton canRefresh={dashboard.canRefresh} nextRefreshAt={dashboard.nextRefreshAt} />
         </section>
 
-        <section className={styles.grid} aria-label="Líderes das últimas 24 horas">
-          {dashboard.leaders.map((leader) => <LeaderCard key={leader.categoryKey} leader={leader} />)}
+        <section className={styles.grid} aria-label="Quatro líderes do YouTube brasileiro nas últimas 24 horas">
+          {orderedLeaders.map((leader) => <LeaderCard key={leader.categoryKey} leader={leader} />)}
         </section>
 
         {missingCategories.length || dashboard.errors.length ? (
           <div className={styles.error}>
-            A última coleta não conseguiu preencher todos os universos. O site mantém os resultados válidos já obtidos.
-            {dashboard.errors.length ? ` Detalhe: ${dashboard.errors.map((item) => `${item.categoryKey}: ${item.message}`).join(' | ')}` : ''}
+            A última coleta não conseguiu preencher todos os quatro universos. O sistema preserva os resultados válidos
+            e tenta reparar snapshots incompletos.
+            {dashboard.errors.length
+              ? ` Detalhe: ${dashboard.errors.map((item) => `${item.categoryKey}: ${item.message}`).join(' | ')}`
+              : ''}
           </div>
         ) : null}
 
         <div className={styles.note}>
-          <strong>Definição desta tela:</strong> “últimas 24h” significa vídeos <em>publicados</em> nas últimas 24 horas,
-          ordenados pelas views acumuladas até a coleta. Isso é diferente de “views ganhas nas últimas 24h” por vídeos
-          mais antigos; essa segunda métrica exige snapshots temporais e continuará sendo tratada separadamente.
-          O botão de atualização só é liberado após 12 horas e a mesma regra é validada no servidor.
+          <strong>Escopo atual:</strong> mercado Brasil (`regionCode=BR`), relevância em português e validação do canal/
+          idioma para evitar resultados estrangeiros. Notícias e Política usa a categoria 25; Ciência e Tecnologia, a
+          categoria 28; Entretenimento, a categoria 24; Economia / Mercados usa Business + termos econômicos. Conteúdo
+          infantil/infantojuvenil, música e os demais bloqueios editoriais do projeto continuam excluídos. A arquitetura
+          mantém `BR` explícito para permitir adicionar o mercado dos Estados Unidos depois sem misturar os rankings.
         </div>
       </main>
     );
@@ -144,13 +161,12 @@ export default async function Home() {
       <main className={styles.page}>
         <header className={styles.header}>
           <div>
-            <p className={styles.eyebrow}>YouTube Intelligence Brasil</p>
+            <p className={styles.eyebrow}>YouTube Intelligence</p>
             <h1>Líderes · 24h</h1>
           </div>
         </header>
         <div className={styles.error}>
-          Não foi possível criar a primeira coleta: {error instanceof Error ? error.message : 'erro desconhecido'}.
-          Assim que uma coleta válida for persistida, o dashboard deixará de depender de uma consulta ao vivo para renderizar.
+          Não foi possível carregar uma coleta válida: {error instanceof Error ? error.message : 'erro desconhecido'}.
         </div>
       </main>
     );
