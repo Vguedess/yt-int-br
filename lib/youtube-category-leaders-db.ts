@@ -220,9 +220,10 @@ export async function getLatestCategoryLeaderDashboard(): Promise<LeaderDashboar
     WHERE run_id = $1
     ORDER BY CASE category_key
       WHEN 'news-politics' THEN 1
-      WHEN 'economia' THEN 2
-      WHEN 'entretenimento' THEN 3
-      ELSE 4
+      WHEN 'science-tech' THEN 2
+      WHEN 'economia' THEN 3
+      WHEN 'entretenimento' THEN 4
+      ELSE 5
     END
   `, [run.run_id]);
 
