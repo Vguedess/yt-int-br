@@ -3,7 +3,8 @@ import { LeaderRefreshButton } from '@/app/components/LeaderRefreshButton';
 import styles from '@/app/leaders.module.css';
 import { getLeaderDashboard } from '@/lib/youtube-category-leader-service';
 import { getHypeDashboard, type HypeVideoCard } from '@/lib/youtube-hype-service';
-import { buildTopicRanking, type TopicRankingItem } from '@/lib/topic-ranking';
+import { buildTopicRanking } from '@/lib/topic-ranking';
+import { enrichTopicRankingWithX, type XEnrichedTopic } from '@/lib/x-topic-service';
 import type { CategoryLeader, LeaderCategoryKey } from '@/lib/youtube-category-leaders';
 
 export const dynamic = 'force-dynamic';
@@ -115,7 +116,8 @@ function ScoreMetric({ label, value, inverse = false }: { label: string; value: 
   );
 }
 
-function TopicRankingRow({ topic }: { topic: TopicRankingItem }) {
+function TopicRankingRow({ topic }: { topic: XEnrichedTopic }) {
+  const x = topic.xSignal;
   return (
     <article className={styles.topicRow}>
       <div className={styles.topicRank}>#{topic.rank}</div>
@@ -140,12 +142,17 @@ function TopicRankingRow({ topic }: { topic: TopicRankingItem }) {
         <ScoreMetric label="Momentum" value={topic.momentumScore} />
         <ScoreMetric label="Breakout" value={topic.breakoutScore} />
         <ScoreMetric label="Saturação" value={topic.saturationScore} inverse />
+        {x.xMomentumScore != null ? <ScoreMetric label="X Momentum" value={x.xMomentumScore} /> : null}
       </div>
       <div className={styles.topicMeta}>
         <span>{compactNumber.format(topic.totalViews)} views no universo</span>
         <span>{topic.videoCount} vídeo(s) · {topic.channelCount} canal(is)</span>
         <span>{topic.sourceCoverage.join(' + ')}</span>
-        <span className={styles.xPending}>X: aguardando enriquecimento</span>
+        {x.trendRank != null
+          ? <span className={styles.xPending}>X Brasil #{x.trendRank}{x.matchedTrends.length ? ` · ${x.matchedTrends.join(', ')}` : ''}</span>
+          : <span className={styles.xPending}>X Brasil: fora do Top 50 atual</span>}
+        {x.totalPosts24h != null ? <span>X em português: {compactNumber.format(x.totalPosts24h)} posts / 24h</span> : null}
+        {x.velocityPct != null ? <span>Velocidade X: {x.velocityPct > 0 ? '+' : ''}{x.velocityPct.toFixed(1)}% na última hora</span> : null}
       </div>
     </article>
   );
@@ -158,7 +165,7 @@ export default async function Home() {
     const orderedLeaders = CATEGORY_ORDER.map((key) => leaderMap.get(key)).filter((leader): leader is CategoryLeader => Boolean(leader));
     const missingCategories = CATEGORY_ORDER.filter((key) => !leaderMap.has(key));
     const hasManualHype = hype.videos.some((video) => video.sourceKind === 'youtube-hype-manual');
-    const topicRanking = buildTopicRanking(orderedLeaders, hype.videos);
+    const topicRanking = await enrichTopicRankingWithX(buildTopicRanking(orderedLeaders, hype.videos));
 
     return (
       <main className={styles.page}>
@@ -214,17 +221,16 @@ export default async function Home() {
         <section className={styles.sectionBlock} aria-labelledby="topics-heading">
           <div className={styles.sectionHeader}>
             <div>
-              <p className={styles.eyebrow}>8 VÍDEOS · TEMAS / SATURAÇÃO</p>
+              <p className={styles.eyebrow}>8 VÍDEOS · TEMAS / SATURAÇÃO + X BRASIL</p>
               <h2 id="topics-heading">Ranking de temas</h2>
               <p>
                 Universo provisório restrito aos 4 líderes de 24h e aos 4 vídeos do ranking Hype. A classificação é semântica,
-                próxima de tags: temas específicos permanecem separados, enquanto a sobreposição entre tags aumenta a pressão
-                de saturação. A curva preserva a lógica `sigmoid-saturation-v1` usada nas versões anteriores do projeto.
+                próxima de tags. O X adiciona Trends do Brasil por WOEID e volume recente em português para medir interesse e dinâmica externa.
               </p>
             </div>
             <div className={styles.hypeTimestamp}>
               <strong>{topicRanking.universeVideoCount} vídeos analisados</strong>
-              <span>X / Twitter será a próxima camada de sinal externo</span>
+              <span>{topicRanking.xObservedAt ? `X Brasil: ${formatDateTime(topicRanking.xObservedAt)}` : 'X Brasil indisponível'}</span>
             </div>
           </div>
 
@@ -232,11 +238,10 @@ export default async function Home() {
             {topicRanking.topics.map((topic) => <TopicRankingRow key={topic.key} topic={topic} />)}
           </div>
 
+          {topicRanking.xWarning ? <div className={styles.hypeWarning}>{topicRanking.xWarning}</div> : null}
+
           <div className={styles.topicMethodNote}>
-            <strong>Leitura atual:</strong> Oportunidade combina momentum, breakout relativo ao tamanho do canal, atenção e espaço
-            antes da saturação. Saturação considera repetição exata e proximidade semântica entre tags. Os valores são proxies
-            relativos apenas a estes 8 vídeos; ainda não representam todo o YouTube Brasil. Sinais do X entram depois como volume,
-            velocidade e engajamento externos, sem substituir os sinais do YouTube.
+            <strong>Leitura atual:</strong> Oportunidade combina sinais do YouTube com até 20% de X Momentum; Momentum recebe até 28% do sinal do X quando disponível. O ranking geográfico do X usa Brasil (WOEID 23424768). O volume de posts usa consultas `lang:pt`, portanto é um sinal linguístico e não deve ser interpretado como volume exclusivamente brasileiro. Trends são cacheados por 1h e contagens por tema por 3h no Neon para controlar custo da API.
           </div>
         </section>
 
