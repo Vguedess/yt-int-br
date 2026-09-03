@@ -75,23 +75,64 @@ const CATEGORY_SPECS: Array<{
   {
     key: 'news-politics',
     label: 'News & Politics',
-    search: { videoCategoryId: '25' }
+    search: { videoCategoryId: '25' },
+    fallbackSearch: {
+      q: 'política|eleições|governo|congresso|senado|STF|TSE|presidente|Lula|Bolsonaro'
+    }
   },
   {
     key: 'economia',
     label: 'Economia',
     search: {
       topicId: '/m/09s1f',
-      q: 'economia|mercado|inflação|juros|selic|dólar|PIB|bolsa|emprego|finanças'
+      q: 'economia|inflação|juros|selic|dólar|PIB|ibovespa|finanças|Banco Central|impostos'
     },
-    fallbackSearch: { topicId: '/m/09s1f' }
+    fallbackSearch: {
+      q: 'economia|inflação|juros|selic|dólar|PIB|ibovespa|finanças|Banco Central|impostos'
+    }
   },
   {
     key: 'entretenimento',
     label: 'Entretenimento',
-    search: { videoCategoryId: '24' }
+    search: { videoCategoryId: '24' },
+    fallbackSearch: {
+      q: 'filme|série|cinema|celebridade|TV|streaming|cultura pop|entretenimento'
+    }
   }
 ];
+
+const ECONOMY_POSITIVE_MARKERS = [
+  'economia', 'economico', 'economica', 'inflacao', 'juros', 'selic', 'dolar', 'pib', 'ibovespa',
+  'financas', 'financeiro', 'financeira', 'banco central', 'imposto', 'tributaria', 'tributario',
+  'recessao', 'divida publica', 'fiscal', 'orcamento', 'emprego', 'desemprego', 'salario', 'renda',
+  'investimento', 'investimentos', 'bolsa de valores', 'petroleo', 'commodities', 'fed', 'tarifa'
+];
+
+const ECONOMY_NEGATIVE_MARKERS = [
+  'mercado de transfer', 'janela de transfer', 'contratacao', 'contratação', 'futebol', 'jogador',
+  'real madrid', 'barcelona', 'premier league', 'la liga', 'champions', 'transfermarkt', 'fichaje',
+  'ultimo dia de mercado', 'último dia de mercado'
+];
+
+function normalize(value: string): string {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function hasAny(value: string, markers: string[]): boolean {
+  const normalized = normalize(value);
+  return markers.some((marker) => normalized.includes(normalize(marker)));
+}
+
+function isEconomyContext(video: VideoItem): boolean {
+  const text = `${video.snippet?.title ?? ''} ${video.snippet?.description ?? ''} ${(video.snippet?.tags ?? []).join(' ')}`;
+  if (hasAny(text, ECONOMY_NEGATIVE_MARKERS)) return false;
+  return hasAny(text, ECONOMY_POSITIVE_MARKERS);
+}
 
 function numeric(value: string | undefined): number {
   const parsed = Number(value ?? 0);
@@ -130,9 +171,10 @@ async function youtubeFetch<T>(resource: string, params: Record<string, string>)
   return (await response.json()) as T;
 }
 
-async function searchVideoIds(
+async function searchByDuration(
   search: Record<string, string>,
-  publishedAfter: string
+  publishedAfter: string,
+  videoDuration: 'medium' | 'long'
 ): Promise<string[]> {
   const response = await youtubeFetch<ListResponse<SearchItem>>('search', {
     part: 'snippet',
@@ -142,24 +184,60 @@ async function searchVideoIds(
     regionCode: REGION,
     relevanceLanguage: LANGUAGE,
     safeSearch: 'moderate',
+    videoDuration,
     maxResults: '50',
     ...search
   });
 
-  return [...new Set((response.items ?? []).map((item) => item.id?.videoId ?? '').filter(Boolean))];
+  return (response.items ?? []).map((item) => item.id?.videoId ?? '').filter(Boolean);
+}
+
+async function searchVideoIds(
+  search: Record<string, string>,
+  publishedAfter: string
+): Promise<string[]> {
+  // The YouTube API only exposes short/medium/long buckets. Query medium and long,
+  // merge them, then enforce our exact >=8 minute policy after hydration.
+  const [medium, long] = await Promise.all([
+    searchByDuration(search, publishedAfter, 'medium'),
+    searchByDuration(search, publishedAfter, 'long')
+  ]);
+  return [...new Set([...medium, ...long])].slice(0, 100);
 }
 
 async function getChannels(channelIds: string[]): Promise<Map<string, ChannelItem>> {
-  const ids = [...new Set(channelIds.filter(Boolean))].slice(0, 50);
-  if (!ids.length) return new Map();
+  const ids = [...new Set(channelIds.filter(Boolean))];
+  const result = new Map<string, ChannelItem>();
 
-  const response = await youtubeFetch<ListResponse<ChannelItem>>('channels', {
-    part: 'snippet,statistics,status',
-    id: ids.join(','),
-    maxResults: '50'
-  });
+  for (let offset = 0; offset < ids.length; offset += 50) {
+    const batch = ids.slice(offset, offset + 50);
+    if (!batch.length) continue;
+    const response = await youtubeFetch<ListResponse<ChannelItem>>('channels', {
+      part: 'snippet,statistics,status',
+      id: batch.join(','),
+      maxResults: '50'
+    });
+    for (const item of response.items ?? []) {
+      if (item.id) result.set(item.id, item);
+    }
+  }
 
-  return new Map((response.items ?? []).filter((item) => item.id).map((item) => [item.id!, item]));
+  return result;
+}
+
+async function getVideos(videoIds: string[]): Promise<VideoItem[]> {
+  const result: VideoItem[] = [];
+  for (let offset = 0; offset < videoIds.length; offset += 50) {
+    const batch = videoIds.slice(offset, offset + 50);
+    if (!batch.length) continue;
+    const response = await youtubeFetch<ListResponse<VideoItem>>('videos', {
+      part: 'snippet,contentDetails,statistics,status',
+      id: batch.join(','),
+      maxResults: '50'
+    });
+    result.push(...(response.items ?? []));
+  }
+  return result;
 }
 
 async function chooseLeader(
@@ -169,12 +247,7 @@ async function chooseLeader(
 ): Promise<CategoryLeader | null> {
   if (!videoIds.length) return null;
 
-  const response = await youtubeFetch<ListResponse<VideoItem>>('videos', {
-    part: 'snippet,contentDetails,statistics,status',
-    id: videoIds.slice(0, 50).join(','),
-    maxResults: '50'
-  });
-  const videos = response.items ?? [];
+  const videos = await getVideos(videoIds);
   const channels = await getChannels(videos.map((video) => video.snippet?.channelId ?? ''));
 
   const eligible = videos.flatMap((video) => {
@@ -187,6 +260,7 @@ async function chooseLeader(
 
     const durationSeconds = parseDurationSeconds(video.contentDetails?.duration);
     if (durationSeconds < MIN_DURATION_SECONDS) return [];
+    if (categoryKey === 'economia' && !isEconomyContext(video)) return [];
 
     const channel = channels.get(channelId);
     const eligibility = evaluateContentEligibility({
@@ -255,7 +329,10 @@ export async function collectCategoryLeaders24h(): Promise<CategoryLeaderCollect
       }
 
       if (!leader) {
-        errors.push({ categoryKey: spec.key, message: 'Nenhum vídeo elegível encontrado nas últimas 24h.' });
+        errors.push({
+          categoryKey: spec.key,
+          message: `Nenhum vídeo long-form elegível entre ${ids.length} candidatos das últimas 24h.`
+        });
         continue;
       }
 
