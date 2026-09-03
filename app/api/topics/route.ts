@@ -1,13 +1,15 @@
 import { getLeaderDashboard } from '@/lib/youtube-category-leader-service';
 import { getHypeDashboard } from '@/lib/youtube-hype-service';
 import { buildTopicRanking } from '@/lib/topic-ranking';
+import { enrichTopicRankingWithX } from '@/lib/x-topic-service';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET() {
   try {
     const [leaders, hype] = await Promise.all([getLeaderDashboard(), getHypeDashboard()]);
-    const ranking = buildTopicRanking(leaders.leaders.slice(0, 4), hype.videos.slice(0, 4));
+    const baseRanking = buildTopicRanking(leaders.leaders.slice(0, 4), hype.videos.slice(0, 4));
+    const ranking = await enrichTopicRankingWithX(baseRanking);
     return Response.json({ ok: true, ranking }, { headers: { 'Cache-Control': 'no-store' } });
   } catch (error) {
     return Response.json({
