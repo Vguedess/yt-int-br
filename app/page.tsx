@@ -172,6 +172,21 @@ export default async function Home() {
         <header className={styles.header}>
           <div><p className={styles.eyebrow}>YouTube Intelligence</p><h1>Líderes · 24h</h1></div>
           <div className={styles.headerActions}>
+            <a
+              href="/studio"
+              style={{
+                padding: '10px 13px',
+                border: '1px solid rgba(255,255,255,.14)',
+                borderRadius: 12,
+                color: '#f4f6f8',
+                background: 'rgba(255,255,255,.045)',
+                fontSize: '.72rem',
+                fontWeight: 750,
+                textDecoration: 'none'
+              }}
+            >
+              Studio de Roteiro →
+            </a>
             <div className={styles.marketSwitch} aria-label="Mercado observado">
               <span className={styles.marketActive}>Brasil</span><span className={styles.marketFuture}>Estados Unidos · em breve</span>
             </div>
