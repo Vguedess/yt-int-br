@@ -13,10 +13,27 @@ export type RefreshLeaderResult = {
   reason: 'initial_load' | 'manual_refresh' | 'still_fresh' | 'repair_incomplete';
 };
 
+const PT_MARKERS = [
+  ' brasil ', ' brasileiro', ' brasileira', ' nao ', ' não ', ' sobre ', ' hoje ', ' agora ', ' governo ',
+  ' economia', ' juros', ' dolar', ' dólar', ' filme', ' serie', ' série', ' noticia', ' notícia', ' com ', ' para '
+];
+
+function looksBrazilian(leader: LeaderDashboard['leaders'][number]): boolean {
+  if (leader.channelCountry === 'BR') return true;
+  if (leader.channelCountry && leader.channelCountry !== 'BR') return false;
+  const text = ` ${leader.title.toLowerCase()} ${leader.channelTitle.toLowerCase()} `;
+  return PT_MARKERS.some((marker) => text.includes(marker));
+}
+
 function isComplete(dashboard: LeaderDashboard | null): dashboard is LeaderDashboard {
   if (!dashboard) return false;
   const keys = new Set(dashboard.leaders.map((leader) => leader.categoryKey));
-  return keys.has('news-politics') && keys.has('economia') && keys.has('entretenimento');
+  return (
+    keys.has('news-politics') &&
+    keys.has('economia') &&
+    keys.has('entretenimento') &&
+    dashboard.leaders.every(looksBrazilian)
+  );
 }
 
 async function collectAndPersist(): Promise<LeaderDashboard> {
@@ -43,7 +60,6 @@ export async function getLeaderDashboard(): Promise<LeaderDashboard> {
       return collectAndPersist();
     });
   } catch (error) {
-    // Never replace a partially useful persisted snapshot with an empty dashboard.
     if (existing) return existing;
     throw error;
   }
@@ -53,8 +69,6 @@ export async function refreshLeaderDashboardIfAllowed(): Promise<RefreshLeaderRe
   return withCategoryLeaderRefreshLock(async () => {
     const existing = await getLatestCategoryLeaderDashboard();
 
-    // Incomplete bootstrap runs can be repaired immediately; the normal 12h gate
-    // only applies once all three leader categories are present.
     if (existing && !isComplete(existing)) {
       const dashboard = await collectAndPersist();
       return { dashboard, refreshed: true, reason: 'repair_incomplete' };
