@@ -270,7 +270,7 @@ async function persistRadar(
         attention_share = EXCLUDED.attention_share,
         peripheral_breakout = EXCLUDED.peripheral_breakout,
         medium_breakout = EXCLUDED.medium_breakout,
-        large_penetration = EXCLUDED.large_penetrATION,
+        large_penetration = EXCLUDED.large_penetration,
         hub_penetration = EXCLUDED.hub_penetration,
         model_version = EXCLUDED.model_version,
         basis = EXCLUDED.basis`,
