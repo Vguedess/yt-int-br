@@ -34,11 +34,14 @@ The first network-aware outputs are:
 `lib/topic-diffusion.ts` aggregates those video signals by topic and distinguishes peripheral breakout from penetration into large channels and hubs. The current stage is explicitly marked `current-cross-section-proxy`; it must not be presented as observed temporal propagation until enough snapshots exist.
 
 ## Native temporal history
-`lib/youtube-history-db.ts` persists hourly-bucketed observations in Neon/Postgres:
+`lib/youtube-history-db.ts` persists discovery-time observations in Neon/Postgres:
 - `youtube_video_snapshots`: views, likes, comments, age, channel size, network escape, breakout and viral-force signals;
 - `youtube_topic_diffusion_snapshots`: topic opportunity, peripheral/medium breakout, large/hub penetration and diffusion stage.
 
-The compound keys make retries idempotent inside an observation hour. This dataset will later support true view deltas, velocity, acceleration and comparable-age channel baselines.
+`lib/youtube-metric-history.ts` owns the cheaper incremental observation path for videos that discovery already selected. It uses `videos.list`, not `search.list`, and persists:
+- `youtube_video_metric_snapshots`: raw views/likes/comments plus observed view gains, real velocity and acceleration once enough observations exist.
+
+Both datasets use hourly buckets and idempotent compound keys. Discovery identifies what deserves monitoring; metric refresh measures how those selected videos evolve without repeatedly spending Search Query quota.
 
 ## Vector memory
 PostgreSQL + pgvector is reserved for semantic memory and retrieval. The `VectorStore` boundary supports three horizons:
@@ -83,7 +86,14 @@ OpenAI is an optional provider behind server-side environment variables. Initial
 AI output must be schema-validated before persistence. The project uses the Responses API boundary and disables response storage in its minimal provider.
 
 ## Recurring collection
-`/api/cron/sync` is the orchestration boundary. Vercel Cron triggers it in production. The route requires `CRON_SECRET` because it mutates historical data and consumes provider quota. Native YouTube history is canonical; Social Blade is optional and explicitly opt-in through `SOCIALBLADE_ENABLED=true`.
+Recurring collection is split by cost and purpose:
+- `/api/cron/discover`: runs macro discovery, network-aware scoring and topic-diffusion inference, then persists selected candidates. This path spends YouTube Search Query quota.
+- `/api/cron/snapshot`: refreshes only already-tracked video IDs with `videos.list`, then records true metric deltas, velocity and acceleration. It does not consume Search Query quota.
+- `/api/cron/sync`: retained as a compatibility/manual orchestration route and optional auxiliary-provider sync.
+
+All mutation routes require `CRON_SECRET`. Native YouTube history is canonical; Social Blade is optional and explicitly opt-in through `SOCIALBLADE_ENABLED=true`.
+
+The current Vercel team is on the Hobby plan, whose native cron schedule is limited to daily execution. `vercel.json` therefore schedules only the daily discovery job. The incremental snapshot route is intentionally unscheduled until either the project moves to a plan that supports higher-frequency cron or an authorized external scheduler is configured. This avoids invalid Vercel configuration and keeps deployment behavior predictable.
 
 Heavy collectors can later enqueue durable work instead of completing within one HTTP invocation.
 
