@@ -54,6 +54,7 @@ export async function ensureCategoryLeaderSchema(): Promise<void> {
       title TEXT NOT NULL,
       channel_id TEXT NOT NULL,
       channel_title TEXT NOT NULL,
+      channel_country TEXT,
       thumbnail_url TEXT,
       published_at TIMESTAMPTZ NOT NULL,
       duration_seconds INTEGER NOT NULL,
@@ -67,6 +68,9 @@ export async function ensureCategoryLeaderSchema(): Promise<void> {
       candidate_count INTEGER NOT NULL,
       PRIMARY KEY (run_id, category_key)
     );
+
+    ALTER TABLE youtube_category_leaders
+      ADD COLUMN IF NOT EXISTS channel_country TEXT;
 
     CREATE INDEX IF NOT EXISTS youtube_category_leader_runs_time_idx
       ON youtube_category_leader_runs (collected_at DESC);
@@ -102,16 +106,17 @@ export async function persistCategoryLeaderCollection(collection: CategoryLeader
     for (const leader of collection.leaders) {
       await client.query(
         `INSERT INTO youtube_category_leaders (
-          run_id, category_key, category_label, video_id, title, channel_id, channel_title,
+          run_id, category_key, category_label, video_id, title, channel_id, channel_title, channel_country,
           thumbnail_url, published_at, duration_seconds, views, likes, comments, subscribers,
           age_hours, views_per_hour, engagement_rate, candidate_count
-        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
         ON CONFLICT (run_id, category_key) DO UPDATE SET
           category_label = EXCLUDED.category_label,
           video_id = EXCLUDED.video_id,
           title = EXCLUDED.title,
           channel_id = EXCLUDED.channel_id,
           channel_title = EXCLUDED.channel_title,
+          channel_country = EXCLUDED.channel_country,
           thumbnail_url = EXCLUDED.thumbnail_url,
           published_at = EXCLUDED.published_at,
           duration_seconds = EXCLUDED.duration_seconds,
@@ -131,6 +136,7 @@ export async function persistCategoryLeaderCollection(collection: CategoryLeader
           leader.title,
           leader.channelId,
           leader.channelTitle,
+          leader.channelCountry,
           leader.thumbnailUrl,
           leader.publishedAt,
           leader.durationSeconds,
@@ -196,6 +202,7 @@ export async function getLatestCategoryLeaderDashboard(): Promise<LeaderDashboar
     title: string;
     channel_id: string;
     channel_title: string;
+    channel_country: string | null;
     thumbnail_url: string | null;
     published_at: Date;
     duration_seconds: number;
@@ -226,6 +233,7 @@ export async function getLatestCategoryLeaderDashboard(): Promise<LeaderDashboar
     title: row.title,
     channelId: row.channel_id,
     channelTitle: row.channel_title,
+    channelCountry: row.channel_country,
     thumbnailUrl: row.thumbnail_url,
     publishedAt: row.published_at.toISOString(),
     durationSeconds: row.duration_seconds,
