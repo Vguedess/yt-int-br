@@ -6,7 +6,7 @@ const LANGUAGE = 'pt';
 const WINDOW_HOURS = 24;
 const MIN_DURATION_SECONDS = 8 * 60;
 
-export type LeaderCategoryKey = 'news-politics' | 'economia' | 'entretenimento';
+export type LeaderCategoryKey = 'news-politics' | 'science-tech' | 'economia' | 'entretenimento';
 
 export type CategoryLeader = {
   categoryKey: LeaderCategoryKey;
@@ -69,23 +69,33 @@ type ChannelItem = {
 
 type ListResponse<T> = { items?: T[] };
 
-const CATEGORY_SPECS: Array<{
+type CategorySpec = {
   key: LeaderCategoryKey;
   label: string;
   search: Record<string, string>;
   fallbackSearch?: Record<string, string>;
-}> = [
+};
+
+const CATEGORY_SPECS: CategorySpec[] = [
   {
     key: 'news-politics',
-    label: 'News & Politics',
+    label: 'Notícias e Política',
     search: { videoCategoryId: '25' },
     fallbackSearch: {
       q: 'política|eleições|governo|congresso|senado|STF|TSE|presidente|Lula|Bolsonaro'
     }
   },
   {
+    key: 'science-tech',
+    label: 'Ciência e Tecnologia',
+    search: { videoCategoryId: '28' },
+    fallbackSearch: {
+      q: 'ciência|tecnologia|inteligência artificial|IA|computação|espaço|astronomia|física|biologia|inovação'
+    }
+  },
+  {
     key: 'economia',
-    label: 'Economia',
+    label: 'Economia / Mercados',
     search: {
       topicId: '/m/09s1f',
       q: 'economia|inflação|juros|selic|dólar|PIB|ibovespa|finanças|Banco Central|impostos'
@@ -120,7 +130,8 @@ const ECONOMY_NEGATIVE_MARKERS = [
 const PORTUGUESE_BRAZIL_MARKERS = [
   'brasil', 'brasileiro', 'brasileira', 'não', 'nao', 'está', 'esta', 'sobre', 'hoje', 'agora',
   'governo', 'eleição', 'eleicao', 'eleições', 'eleicoes', 'economia', 'juros', 'dólar', 'dolar',
-  'filme', 'série', 'serie', 'cinema', 'notícia', 'noticia', 'notícias', 'noticias', 'com', 'para'
+  'ciência', 'ciencia', 'tecnologia', 'filme', 'série', 'serie', 'cinema', 'notícia', 'noticia',
+  'notícias', 'noticias', 'com', 'para'
 ];
 
 const ENTERTAINMENT_STREAM_MARKERS = [
