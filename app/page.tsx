@@ -82,7 +82,7 @@ function LeaderCard({ leader }: { leader: CategoryLeader }) {
 
           <div className={styles.cardFooter}>
             <span>Publicado {formatDateTime(leader.publishedAt)}</span>
-            <span>YouTube Brasil · {leader.candidateCount} candidatos</span>
+            <span>Mercado YouTube BR · {leader.candidateCount} candidatos</span>
           </div>
         </div>
       </a>
@@ -126,33 +126,30 @@ export default async function Home() {
             <h2>Um líder por grande mercado.</h2>
             <p>
               Quatro universos independentes: Notícias e Política, Ciência e Tecnologia, Economia / Mercados e
-              Entretenimento. O líder é o vídeo brasileiro long-form com mais views acumuladas entre os candidatos
-              publicados nas últimas 24 horas e encontrados pela pesquisa do YouTube para o Brasil.
+              Entretenimento. Cada líder vem da pesquisa do YouTube configurada para o mercado Brasil (`regionCode=BR`),
+              com relevância em português, janela de 24 horas e os filtros editoriais do projeto.
             </p>
           </div>
           <LeaderRefreshButton canRefresh={dashboard.canRefresh} nextRefreshAt={dashboard.nextRefreshAt} />
         </section>
 
-        <section className={styles.grid} aria-label="Quatro líderes do YouTube brasileiro nas últimas 24 horas">
+        <section className={styles.grid} aria-label="Quatro líderes do mercado brasileiro do YouTube nas últimas 24 horas">
           {orderedLeaders.map((leader) => <LeaderCard key={leader.categoryKey} leader={leader} />)}
         </section>
 
-        {missingCategories.length || dashboard.errors.length ? (
+        {missingCategories.length ? (
           <div className={styles.error}>
-            A última coleta não conseguiu preencher todos os quatro universos. O sistema preserva os resultados válidos
-            e tenta reparar snapshots incompletos.
-            {dashboard.errors.length
-              ? ` Detalhe: ${dashboard.errors.map((item) => `${item.categoryKey}: ${item.message}`).join(' | ')}`
-              : ''}
+            Ainda faltam dados válidos para: {missingCategories.join(', ')}. As demais colunas preservam o último líder
+            válido salvo no banco.
           </div>
         ) : null}
 
         <div className={styles.note}>
-          <strong>Escopo atual:</strong> mercado Brasil (`regionCode=BR`), relevância em português e validação do canal/
-          idioma para evitar resultados estrangeiros. Notícias e Política usa a categoria 25; Ciência e Tecnologia, a
-          categoria 28; Entretenimento, a categoria 24; Economia / Mercados usa Business + termos econômicos. Conteúdo
-          infantil/infantojuvenil, música e os demais bloqueios editoriais do projeto continuam excluídos. A arquitetura
-          mantém `BR` explícito para permitir adicionar o mercado dos Estados Unidos depois sem misturar os rankings.
+          <strong>Escopo atual:</strong> mercado YouTube Brasil (`regionCode=BR`) e `relevanceLanguage=pt`. Notícias e
+          Política usa a categoria 25; Ciência e Tecnologia, a categoria 28; Entretenimento, a categoria 24; Economia /
+          Mercados usa Business + termos econômicos. Conteúdo infantil/infantojuvenil, música e os demais bloqueios
+          editoriais continuam excluídos. O mercado está explícito no modelo para permitir adicionar Estados Unidos depois
+          como uma leitura separada, sem misturar BR e US.
         </div>
       </main>
     );
