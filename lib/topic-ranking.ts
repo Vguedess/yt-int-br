@@ -294,7 +294,13 @@ export function buildTopicRanking(leaders: CategoryLeader[], hype: HypeVideoCard
     const meanSemanticOverlap = overlaps.length ? overlaps.reduce((sum, value) => sum + value, 0) / overlaps.length : 0;
     const sources = new Set(group.videos.map((video) => video.source));
     const crossSource = sources.size > 1 ? 1 : 0;
-    const rawSaturation = exactRepetition * 0.5 + maxSemanticOverlap * 0.3 + meanSemanticOverlap * 0.1 + crossSource * 0.1;
+
+    // Preserve the original sigmoid behavior: the strongest semantic collision should reach
+    // the curve directly. Repetition/cross-source evidence only adds pressure on top of it.
+    const rawSaturation = Math.min(
+      1,
+      Math.max(exactRepetition, maxSemanticOverlap) + meanSemanticOverlap * 0.10 + crossSource * 0.10
+    );
     const saturationScore = sigmoidSaturation(rawSaturation);
 
     const perVideoAttention = group.videos.map((video) => percentileScore(Math.log10(video.views + 1), logViews));
@@ -313,7 +319,7 @@ export function buildTopicRanking(leaders: CategoryLeader[], hype: HypeVideoCard
 
     let stage: TopicRankingStage = 'OBSERVACAO';
     if (saturationScore >= 72) stage = 'SATURANDO';
-    else if (sources.has('youtube-hype') && breakoutScore >= 72 && saturationScore < 50) stage = 'BREAKOUT';
+    else if (sources.has('youtube-hype') && breakoutScore >= 72 && saturationScore < 60) stage = 'BREAKOUT';
     else if (momentumScore >= 74) stage = 'ACELERACAO';
     else if (attentionScore >= 68 || opportunityScore >= 68) stage = 'EM_ALTA';
 
