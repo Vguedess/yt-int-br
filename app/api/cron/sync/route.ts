@@ -3,6 +3,7 @@ import { getCurrentPopularity, type CurrentPopularitySnapshot } from '@/lib/yout
 import { persistYoutubePopularitySnapshot } from '@/lib/youtube-history-db';
 import { getSocialBladeYouTubeStats, isSocialBladeConfigured, socialBladeHistoryMode } from '@/lib/socialblade';
 import { ensureSocialBladeSchema, upsertSocialBladeStats } from '@/lib/db';
+import { authorizeCronRequest } from '@/lib/cron-auth';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -48,8 +49,6 @@ async function syncSocialBlade(radar: CurrentPopularitySnapshot): Promise<{
   let attempted = 0;
   let stoppedReason: string | undefined;
 
-  // Deliberately sequential: Social Blade calls can consume credits. This allows the
-  // collector to stop immediately on exhausted credits or another account-level error.
   for (const channelId of channelIds) {
     attempted += 1;
     try {
@@ -79,25 +78,8 @@ async function syncSocialBlade(radar: CurrentPopularitySnapshot): Promise<{
 }
 
 export async function GET(request: Request) {
-  const secret = process.env.CRON_SECRET;
-
-  // The sync mutates historical datasets and consumes provider quota. Keep it private
-  // even when all currently enabled collectors are free.
-  if (!secret) {
-    return Response.json(
-      {
-        ok: false,
-        error: 'cron_secret_required',
-        message: 'Set CRON_SECRET in Vercel before enabling recurring historical collection.'
-      },
-      { status: 503 }
-    );
-  }
-
-  const authorization = request.headers.get('authorization');
-  if (authorization !== `Bearer ${secret}`) {
-    return Response.json({ ok: false, error: 'unauthorized' }, { status: 401 });
-  }
+  const unauthorized = authorizeCronRequest(request);
+  if (unauthorized) return unauthorized;
 
   const radar = await getCurrentPopularity();
   const youtubeHistory = await persistYoutubePopularitySnapshot(radar);
