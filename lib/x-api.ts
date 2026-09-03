@@ -116,7 +116,10 @@ export async function fetchRecentXPostCounts(query: string, hours: number = 24):
   if (!trimmed) throw new Error('X recent-count query is empty');
 
   const safeHours = Math.max(2, Math.min(168, Math.floor(hours)));
-  const end = new Date(Date.now() - 60_000);
+  // X returns an incomplete bucket when end_time falls inside the current hour.
+  // Align to the beginning of the current UTC hour so velocity compares full hours only.
+  const end = new Date();
+  end.setUTCMinutes(0, 0, 0);
   const start = new Date(end.getTime() - safeHours * 3_600_000);
   const params = new URLSearchParams({
     query: trimmed,
