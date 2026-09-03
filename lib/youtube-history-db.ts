@@ -24,6 +24,29 @@ function hourBucket(value: string): string {
   return date.toISOString();
 }
 
+export type HistoricalHypeVideo = {
+  videoId: string;
+  categoryKey: string;
+  channelId: string;
+  channelTitle: string;
+  title: string;
+  publishedAt: string;
+  observedHour: string;
+  subscribers: number | null;
+  views: number;
+  likes: number;
+  comments: number;
+  engagementRate: number;
+  viewsPerHour: number;
+  nodeTier: string;
+  networkEscape: number;
+  nodeDifficulty: number;
+  breakoutStrength: number;
+  viralForce: number;
+  hypeScore: number;
+  modelVersion: string;
+};
+
 export async function ensureYoutubeHistorySchema(): Promise<void> {
   const pool = getPool();
   if (!pool) throw new Error('DATABASE_URL is not configured');
@@ -62,6 +85,8 @@ export async function ensureYoutubeHistorySchema(): Promise<void> {
       ON youtube_video_snapshots (category_key, observed_hour DESC);
     CREATE INDEX IF NOT EXISTS youtube_video_snapshots_breakout_idx
       ON youtube_video_snapshots (observed_hour DESC, breakout_strength DESC);
+    CREATE INDEX IF NOT EXISTS youtube_video_snapshots_hype_idx
+      ON youtube_video_snapshots (observed_hour DESC, hype_score DESC, viral_force DESC);
 
     CREATE TABLE IF NOT EXISTS youtube_topic_diffusion_snapshots (
       category_key TEXT NOT NULL,
@@ -85,6 +110,85 @@ export async function ensureYoutubeHistorySchema(): Promise<void> {
     CREATE INDEX IF NOT EXISTS youtube_topic_diffusion_opportunity_idx
       ON youtube_topic_diffusion_snapshots (observed_hour DESC, opportunity_score DESC);
   `);
+}
+
+export async function getLatestHistoricalHypeVideos(limit: number = 4): Promise<{
+  observedHour: string | null;
+  videos: HistoricalHypeVideo[];
+}> {
+  const pool = getPool();
+  if (!pool) return { observedHour: null, videos: [] };
+  await ensureYoutubeHistorySchema();
+
+  const safeLimit = Math.max(1, Math.min(20, Math.floor(limit)));
+  const result = await pool.query<{
+    video_id: string;
+    category_key: string;
+    channel_id: string;
+    channel_title: string;
+    title: string;
+    published_at: Date;
+    observed_hour: Date;
+    subscribers: string | null;
+    views: string;
+    likes: string;
+    comments: string;
+    engagement_rate: number;
+    views_per_hour_proxy: number;
+    node_tier: string;
+    network_escape: number;
+    node_difficulty: number;
+    breakout_strength: number;
+    viral_force: number;
+    hype_score: number;
+    model_version: string;
+  }>(`
+    WITH latest_hour AS (
+      SELECT MAX(observed_hour) AS observed_hour
+      FROM youtube_video_snapshots
+    ), per_video AS (
+      SELECT DISTINCT ON (video_id)
+        video_id, category_key, channel_id, channel_title, title, published_at, observed_hour,
+        subscribers, views, likes, comments, engagement_rate, views_per_hour_proxy,
+        node_tier, network_escape, node_difficulty, breakout_strength, viral_force,
+        hype_score, model_version
+      FROM youtube_video_snapshots
+      WHERE observed_hour = (SELECT observed_hour FROM latest_hour)
+      ORDER BY video_id, hype_score DESC, viral_force DESC, views_per_hour_proxy DESC
+    )
+    SELECT *
+    FROM per_video
+    ORDER BY hype_score DESC, viral_force DESC, breakout_strength DESC, views_per_hour_proxy DESC
+    LIMIT $1
+  `, [safeLimit]);
+
+  const videos: HistoricalHypeVideo[] = result.rows.map((row) => ({
+    videoId: row.video_id,
+    categoryKey: row.category_key,
+    channelId: row.channel_id,
+    channelTitle: row.channel_title,
+    title: row.title,
+    publishedAt: row.published_at.toISOString(),
+    observedHour: row.observed_hour.toISOString(),
+    subscribers: row.subscribers == null ? null : Number(row.subscribers),
+    views: Number(row.views),
+    likes: Number(row.likes),
+    comments: Number(row.comments),
+    engagementRate: row.engagement_rate,
+    viewsPerHour: row.views_per_hour_proxy,
+    nodeTier: row.node_tier,
+    networkEscape: row.network_escape,
+    nodeDifficulty: row.node_difficulty,
+    breakoutStrength: row.breakout_strength,
+    viralForce: row.viral_force,
+    hypeScore: row.hype_score,
+    modelVersion: row.model_version
+  }));
+
+  return {
+    observedHour: videos[0]?.observedHour ?? null,
+    videos
+  };
 }
 
 async function persistRadar(
@@ -166,7 +270,7 @@ async function persistRadar(
         attention_share = EXCLUDED.attention_share,
         peripheral_breakout = EXCLUDED.peripheral_breakout,
         medium_breakout = EXCLUDED.medium_breakout,
-        large_penetration = EXCLUDED.large_penetration,
+        large_penetration = EXCLUDED.large_penetrATION,
         hub_penetration = EXCLUDED.hub_penetration,
         model_version = EXCLUDED.model_version,
         basis = EXCLUDED.basis`,
