@@ -13,9 +13,12 @@ export type RefreshLeaderResult = {
   reason: 'initial_load' | 'manual_refresh' | 'still_fresh' | 'repair_incomplete';
 };
 
+const REQUIRED_CATEGORIES = ['news-politics', 'science-tech', 'economia', 'entretenimento'] as const;
+
 const PT_MARKERS = [
   ' brasil ', ' brasileiro', ' brasileira', ' nao ', ' não ', ' sobre ', ' hoje ', ' agora ', ' governo ',
-  ' economia', ' juros', ' dolar', ' dólar', ' filme', ' serie', ' série', ' noticia', ' notícia', ' com ', ' para '
+  ' economia', ' juros', ' dolar', ' dólar', ' ciencia', ' ciência', ' tecnologia', ' filme', ' serie', ' série',
+  ' noticia', ' notícia', ' com ', ' para '
 ];
 
 function looksBrazilian(leader: LeaderDashboard['leaders'][number]): boolean {
@@ -28,12 +31,7 @@ function looksBrazilian(leader: LeaderDashboard['leaders'][number]): boolean {
 function isComplete(dashboard: LeaderDashboard | null): dashboard is LeaderDashboard {
   if (!dashboard) return false;
   const keys = new Set(dashboard.leaders.map((leader) => leader.categoryKey));
-  return (
-    keys.has('news-politics') &&
-    keys.has('economia') &&
-    keys.has('entretenimento') &&
-    dashboard.leaders.every(looksBrazilian)
-  );
+  return REQUIRED_CATEGORIES.every((key) => keys.has(key)) && dashboard.leaders.every(looksBrazilian);
 }
 
 async function collectAndPersist(): Promise<LeaderDashboard> {
