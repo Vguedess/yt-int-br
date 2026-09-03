@@ -77,7 +77,8 @@ function queryForTopic(topic: TopicRankingItem): string {
     const escaped = tag.replace(/"/g, '');
     return escaped.includes(' ') ? `"${escaped}"` : escaped;
   });
-  return `(${terms.join(' OR ')}) lang:pt`;
+  // Double parentheses are intentionally part of the cache key for the complete-hour calculation version.
+  return `((${terms.join(' OR ')})) lang:pt`;
 }
 
 function matchTopicToTrends(topic: TopicRankingItem, trends: XTrendSnapshot): {
@@ -129,10 +130,11 @@ async function loadTrends(): Promise<{ snapshot: XTrendSnapshot | null; warning:
 }
 
 async function loadCount(topic: TopicRankingItem): Promise<StoredXTopicCount | null> {
+  const expectedQuery = queryForTopic(topic);
   const cached = await getLatestXTopicCount(topic.key).catch(() => null);
-  if (cached && isFresh(cached.observedHour, COUNT_TTL_MS)) return cached;
+  if (cached && cached.query === expectedQuery && isFresh(cached.observedHour, COUNT_TTL_MS)) return cached;
 
-  const live = await fetchRecentXPostCounts(queryForTopic(topic), 24);
+  const live = await fetchRecentXPostCounts(expectedQuery, 24);
   await persistXTopicCount(topic.key, live).catch(() => undefined);
   return {
     topicKey: topic.key,
