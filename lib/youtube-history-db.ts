@@ -47,6 +47,15 @@ export type HistoricalHypeVideo = {
   modelVersion: string;
 };
 
+export type ManualHypeSnapshot = {
+  batchId: string;
+  market: string;
+  observedAt: string;
+  source: string;
+  filters: string[];
+  videoIds: string[];
+};
+
 export async function ensureYoutubeHistorySchema(): Promise<void> {
   const pool = getPool();
   if (!pool) throw new Error('DATABASE_URL is not configured');
@@ -109,7 +118,103 @@ export async function ensureYoutubeHistorySchema(): Promise<void> {
 
     CREATE INDEX IF NOT EXISTS youtube_topic_diffusion_opportunity_idx
       ON youtube_topic_diffusion_snapshots (observed_hour DESC, opportunity_score DESC);
+
+    CREATE TABLE IF NOT EXISTS youtube_manual_hype_snapshots (
+      batch_id TEXT NOT NULL,
+      market TEXT NOT NULL,
+      rank SMALLINT NOT NULL CHECK (rank >= 1),
+      video_id TEXT NOT NULL,
+      observed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      source TEXT NOT NULL,
+      filters JSONB NOT NULL DEFAULT '[]'::jsonb,
+      PRIMARY KEY (batch_id, rank),
+      UNIQUE (batch_id, video_id)
+    );
+
+    CREATE INDEX IF NOT EXISTS youtube_manual_hype_snapshots_market_time_idx
+      ON youtube_manual_hype_snapshots (market, observed_at DESC, rank ASC);
   `);
+}
+
+export async function persistManualHypeSnapshot(input: {
+  batchId: string;
+  market: string;
+  videoIds: string[];
+  source: string;
+  filters: string[];
+}): Promise<ManualHypeSnapshot> {
+  const pool = getPool();
+  if (!pool) throw new Error('DATABASE_URL is not configured');
+  await ensureYoutubeHistorySchema();
+
+  const ids = [...new Set(input.videoIds.map((id) => id.trim()).filter(Boolean))].slice(0, 20);
+  if (!ids.length) throw new Error('No video IDs supplied');
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    for (let index = 0; index < ids.length; index += 1) {
+      await client.query(
+        `INSERT INTO youtube_manual_hype_snapshots (
+          batch_id, market, rank, video_id, source, filters
+        ) VALUES ($1,$2,$3,$4,$5,$6::jsonb)
+        ON CONFLICT (batch_id, rank) DO UPDATE SET
+          market = EXCLUDED.market,
+          video_id = EXCLUDED.video_id,
+          source = EXCLUDED.source,
+          filters = EXCLUDED.filters`,
+        [input.batchId, input.market, index + 1, ids[index], input.source, JSON.stringify(input.filters)]
+      );
+    }
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+
+  const latest = await getLatestManualHypeSnapshot(input.market);
+  if (!latest) throw new Error('Manual Hype snapshot was not persisted');
+  return latest;
+}
+
+export async function getLatestManualHypeSnapshot(market: string = 'BR'): Promise<ManualHypeSnapshot | null> {
+  const pool = getPool();
+  if (!pool) return null;
+  await ensureYoutubeHistorySchema();
+
+  const latest = await pool.query<{
+    batch_id: string;
+    observed_at: Date;
+    source: string;
+    filters: unknown;
+  }>(`
+    SELECT batch_id, observed_at, source, filters
+    FROM youtube_manual_hype_snapshots
+    WHERE market = $1
+    ORDER BY observed_at DESC, rank ASC
+    LIMIT 1
+  `, [market]);
+
+  if (!latest.rows.length) return null;
+  const selected = latest.rows[0];
+  const rows = await pool.query<{ video_id: string }>(`
+    SELECT video_id
+    FROM youtube_manual_hype_snapshots
+    WHERE market = $1 AND batch_id = $2
+    ORDER BY rank ASC
+  `, [market, selected.batch_id]);
+
+  const filters = Array.isArray(selected.filters) ? selected.filters.map(String) : [];
+  return {
+    batchId: selected.batch_id,
+    market,
+    observedAt: selected.observed_at.toISOString(),
+    source: selected.source,
+    filters,
+    videoIds: rows.rows.map((row) => row.video_id)
+  };
 }
 
 export async function getLatestHistoricalHypeVideos(limit: number = 4): Promise<{
