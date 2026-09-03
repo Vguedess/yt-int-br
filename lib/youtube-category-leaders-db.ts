@@ -5,6 +5,8 @@ const globalForLeaderDb = globalThis as unknown as { ytLeaderPool?: Pool };
 const REFRESH_INTERVAL_HOURS = 12;
 const REFRESH_LOCK_KEY = 7242026;
 
+const CATEGORY_ORDER: LeaderCategoryKey[] = ['news-politics', 'science-tech', 'economia', 'entretenimento'];
+
 function getPool(): Pool {
   const connectionString = process.env.DATABASE_URL;
   if (!connectionString) throw new Error('DATABASE_URL is not configured');
@@ -215,38 +217,38 @@ export async function getLatestCategoryLeaderDashboard(): Promise<LeaderDashboar
     engagement_rate: number;
     candidate_count: number;
   }>(`
-    SELECT *
-    FROM youtube_category_leaders
-    WHERE run_id = $1
-    ORDER BY CASE category_key
-      WHEN 'news-politics' THEN 1
-      WHEN 'science-tech' THEN 2
-      WHEN 'economia' THEN 3
-      WHEN 'entretenimento' THEN 4
-      ELSE 5
-    END
-  `, [run.run_id]);
+    SELECT DISTINCT ON (l.category_key)
+      l.category_key, l.category_label, l.video_id, l.title, l.channel_id, l.channel_title,
+      l.channel_country, l.thumbnail_url, l.published_at, l.duration_seconds, l.views, l.likes,
+      l.comments, l.subscribers, l.age_hours, l.views_per_hour, l.engagement_rate, l.candidate_count
+    FROM youtube_category_leaders l
+    JOIN youtube_category_leader_runs r ON r.run_id = l.run_id
+    WHERE r.region = 'BR'
+    ORDER BY l.category_key, r.collected_at DESC
+  `);
 
-  const leaders: CategoryLeader[] = leaderResult.rows.map((row) => ({
-    categoryKey: row.category_key,
-    categoryLabel: row.category_label,
-    videoId: row.video_id,
-    title: row.title,
-    channelId: row.channel_id,
-    channelTitle: row.channel_title,
-    channelCountry: row.channel_country,
-    thumbnailUrl: row.thumbnail_url,
-    publishedAt: row.published_at.toISOString(),
-    durationSeconds: row.duration_seconds,
-    views: Number(row.views),
-    likes: Number(row.likes),
-    comments: Number(row.comments),
-    subscribers: row.subscribers == null ? null : Number(row.subscribers),
-    ageHours: row.age_hours,
-    viewsPerHour: row.views_per_hour,
-    engagementRate: row.engagement_rate,
-    candidateCount: row.candidate_count
-  }));
+  const leaders: CategoryLeader[] = leaderResult.rows
+    .map((row) => ({
+      categoryKey: row.category_key,
+      categoryLabel: row.category_label,
+      videoId: row.video_id,
+      title: row.title,
+      channelId: row.channel_id,
+      channelTitle: row.channel_title,
+      channelCountry: row.channel_country,
+      thumbnailUrl: row.thumbnail_url,
+      publishedAt: row.published_at.toISOString(),
+      durationSeconds: row.duration_seconds,
+      views: Number(row.views),
+      likes: Number(row.likes),
+      comments: Number(row.comments),
+      subscribers: row.subscribers == null ? null : Number(row.subscribers),
+      ageHours: row.age_hours,
+      viewsPerHour: row.views_per_hour,
+      engagementRate: row.engagement_rate,
+      candidateCount: row.candidate_count
+    }))
+    .sort((a, b) => CATEGORY_ORDER.indexOf(a.categoryKey) - CATEGORY_ORDER.indexOf(b.categoryKey));
 
   const collectedAt = run.collected_at.toISOString();
   return {
