@@ -15,6 +15,7 @@ export type CategoryLeader = {
   title: string;
   channelId: string;
   channelTitle: string;
+  channelCountry: string | null;
   thumbnailUrl: string | null;
   publishedAt: string;
   durationSeconds: number;
@@ -50,6 +51,8 @@ type VideoItem = {
     tags?: string[];
     publishedAt?: string;
     liveBroadcastContent?: string;
+    defaultLanguage?: string;
+    defaultAudioLanguage?: string;
     thumbnails?: Record<string, Thumbnail>;
   };
   contentDetails?: { duration?: string };
@@ -59,7 +62,7 @@ type VideoItem = {
 
 type ChannelItem = {
   id?: string;
-  snippet?: { title?: string; description?: string };
+  snippet?: { title?: string; description?: string; country?: string };
   statistics?: { subscriberCount?: string; hiddenSubscriberCount?: boolean };
   status?: { madeForKids?: boolean };
 };
@@ -96,7 +99,7 @@ const CATEGORY_SPECS: Array<{
     label: 'Entretenimento',
     search: { videoCategoryId: '24' },
     fallbackSearch: {
-      q: 'filme|série|cinema|celebridade|TV|streaming|cultura pop|entretenimento'
+      q: 'filme|série|cinema|celebridade|TV|cultura pop|entretenimento'
     }
   }
 ];
@@ -105,13 +108,24 @@ const ECONOMY_POSITIVE_MARKERS = [
   'economia', 'economico', 'economica', 'inflacao', 'juros', 'selic', 'dolar', 'pib', 'ibovespa',
   'financas', 'financeiro', 'financeira', 'banco central', 'imposto', 'tributaria', 'tributario',
   'recessao', 'divida publica', 'fiscal', 'orcamento', 'emprego', 'desemprego', 'salario', 'renda',
-  'investimento', 'investimentos', 'bolsa de valores', 'petroleo', 'commodities', 'fed', 'tarifa'
+  'investimento', 'investimentos', 'bolsa de valores', 'petroleo', 'commodities', 'tarifa', 'copom'
 ];
 
 const ECONOMY_NEGATIVE_MARKERS = [
   'mercado de transfer', 'janela de transfer', 'contratacao', 'contratação', 'futebol', 'jogador',
   'real madrid', 'barcelona', 'premier league', 'la liga', 'champions', 'transfermarkt', 'fichaje',
   'ultimo dia de mercado', 'último dia de mercado'
+];
+
+const PORTUGUESE_BRAZIL_MARKERS = [
+  'brasil', 'brasileiro', 'brasileira', 'não', 'nao', 'está', 'esta', 'sobre', 'hoje', 'agora',
+  'governo', 'eleição', 'eleicao', 'eleições', 'eleicoes', 'economia', 'juros', 'dólar', 'dolar',
+  'filme', 'série', 'serie', 'cinema', 'notícia', 'noticia', 'notícias', 'noticias', 'com', 'para'
+];
+
+const ENTERTAINMENT_STREAM_MARKERS = [
+  ' is live ', ' live for ', ' livestream', 'live stream', 'streaming now', 'ao vivo', ' transmissão ao vivo',
+  ' transmissao ao vivo'
 ];
 
 function normalize(value: string): string {
@@ -124,14 +138,31 @@ function normalize(value: string): string {
 }
 
 function hasAny(value: string, markers: string[]): boolean {
-  const normalized = normalize(value);
-  return markers.some((marker) => normalized.includes(normalize(marker)));
+  const normalized = ` ${normalize(value)} `;
+  return markers.some((marker) => normalized.includes(` ${normalize(marker)} `) || normalized.includes(normalize(marker)));
 }
 
 function isEconomyContext(video: VideoItem): boolean {
-  const text = `${video.snippet?.title ?? ''} ${video.snippet?.description ?? ''} ${(video.snippet?.tags ?? []).join(' ')}`;
+  const text = `${video.snippet?.title ?? ''} ${video.snippet?.description ?? ''}`;
   if (hasAny(text, ECONOMY_NEGATIVE_MARKERS)) return false;
   return hasAny(text, ECONOMY_POSITIVE_MARKERS);
+}
+
+function isBrazilianLocale(video: VideoItem, channel: ChannelItem | undefined): boolean {
+  const country = channel?.snippet?.country?.toUpperCase();
+  if (country === 'BR') return true;
+  if (country && country !== 'BR') return false;
+
+  const language = (video.snippet?.defaultAudioLanguage ?? video.snippet?.defaultLanguage ?? '').toLowerCase();
+  if (language === 'pt' || language.startsWith('pt-')) return true;
+
+  const text = `${video.snippet?.title ?? ''} ${video.snippet?.description ?? ''} ${channel?.snippet?.description ?? ''}`;
+  return hasAny(text, PORTUGUESE_BRAZIL_MARKERS);
+}
+
+function isGenericEntertainmentStream(video: VideoItem): boolean {
+  const title = ` ${video.snippet?.title ?? ''} `;
+  return hasAny(title, ENTERTAINMENT_STREAM_MARKERS);
 }
 
 function numeric(value: string | undefined): number {
@@ -196,8 +227,6 @@ async function searchVideoIds(
   search: Record<string, string>,
   publishedAfter: string
 ): Promise<string[]> {
-  // The YouTube API only exposes short/medium/long buckets. Query medium and long,
-  // merge them, then enforce our exact >=8 minute policy after hydration.
   const [medium, long] = await Promise.all([
     searchByDuration(search, publishedAfter, 'medium'),
     searchByDuration(search, publishedAfter, 'long')
@@ -260,9 +289,12 @@ async function chooseLeader(
 
     const durationSeconds = parseDurationSeconds(video.contentDetails?.duration);
     if (durationSeconds < MIN_DURATION_SECONDS) return [];
-    if (categoryKey === 'economia' && !isEconomyContext(video)) return [];
 
     const channel = channels.get(channelId);
+    if (!isBrazilianLocale(video, channel)) return [];
+    if (categoryKey === 'economia' && !isEconomyContext(video)) return [];
+    if (categoryKey === 'entretenimento' && isGenericEntertainmentStream(video)) return [];
+
     const eligibility = evaluateContentEligibility({
       videoId,
       title,
@@ -295,6 +327,7 @@ async function chooseLeader(
       title,
       channelId,
       channelTitle,
+      channelCountry: channel?.snippet?.country?.toUpperCase() ?? null,
       thumbnailUrl: thumbnail(video.snippet?.thumbnails),
       publishedAt,
       durationSeconds,
@@ -331,7 +364,7 @@ export async function collectCategoryLeaders24h(): Promise<CategoryLeaderCollect
       if (!leader) {
         errors.push({
           categoryKey: spec.key,
-          message: `Nenhum vídeo long-form elegível entre ${ids.length} candidatos das últimas 24h.`
+          message: `Nenhum vídeo brasileiro long-form elegível entre ${ids.length} candidatos das últimas 24h.`
         });
         continue;
       }
