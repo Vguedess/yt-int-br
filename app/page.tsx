@@ -3,6 +3,7 @@ import { LeaderRefreshButton } from '@/app/components/LeaderRefreshButton';
 import styles from '@/app/leaders.module.css';
 import { getLeaderDashboard } from '@/lib/youtube-category-leader-service';
 import { getHypeDashboard, type HypeVideoCard } from '@/lib/youtube-hype-service';
+import { buildTopicRanking, type TopicRankingItem } from '@/lib/topic-ranking';
 import type { CategoryLeader, LeaderCategoryKey } from '@/lib/youtube-category-leaders';
 
 export const dynamic = 'force-dynamic';
@@ -103,6 +104,53 @@ function HypeCard({ video }: { video: HypeVideoCard }) {
   );
 }
 
+function ScoreMetric({ label, value, inverse = false }: { label: string; value: number; inverse?: boolean }) {
+  return (
+    <div className={styles.topicMetric}>
+      <div><span>{label}</span><strong>{value}</strong></div>
+      <div className={styles.topicBar} aria-label={`${label}: ${value} de 100`}>
+        <span style={{ width: `${inverse ? 100 - value : value}%` }} />
+      </div>
+    </div>
+  );
+}
+
+function TopicRankingRow({ topic }: { topic: TopicRankingItem }) {
+  return (
+    <article className={styles.topicRow}>
+      <div className={styles.topicRank}>#{topic.rank}</div>
+      <div className={styles.topicIdentity}>
+        <div className={styles.topicTitleLine}>
+          <h3>{topic.label}</h3>
+          <span className={styles.topicStage}>{topic.stage.replace('_', ' ')}</span>
+        </div>
+        <div className={styles.topicTags}>
+          {topic.tags.map((tag) => <span key={tag}>{tag}</span>)}
+        </div>
+        <div className={styles.topicEvidence}>
+          {topic.evidence.map((video) => (
+            <span key={video.videoId}>
+              {video.source === 'youtube-hype' ? `Hype #${video.sourceRank}` : 'Líder 24h'} · {video.channelTitle}
+            </span>
+          ))}
+        </div>
+      </div>
+      <div className={styles.topicScores}>
+        <ScoreMetric label="Oportunidade" value={topic.opportunityScore} />
+        <ScoreMetric label="Momentum" value={topic.momentumScore} />
+        <ScoreMetric label="Breakout" value={topic.breakoutScore} />
+        <ScoreMetric label="Saturação" value={topic.saturationScore} inverse />
+      </div>
+      <div className={styles.topicMeta}>
+        <span>{compactNumber.format(topic.totalViews)} views no universo</span>
+        <span>{topic.videoCount} vídeo(s) · {topic.channelCount} canal(is)</span>
+        <span>{topic.sourceCoverage.join(' + ')}</span>
+        <span className={styles.xPending}>X: aguardando enriquecimento</span>
+      </div>
+    </article>
+  );
+}
+
 export default async function Home() {
   try {
     const [dashboard, hype] = await Promise.all([getLeaderDashboard(), getHypeDashboard()]);
@@ -110,6 +158,7 @@ export default async function Home() {
     const orderedLeaders = CATEGORY_ORDER.map((key) => leaderMap.get(key)).filter((leader): leader is CategoryLeader => Boolean(leader));
     const missingCategories = CATEGORY_ORDER.filter((key) => !leaderMap.has(key));
     const hasManualHype = hype.videos.some((video) => video.sourceKind === 'youtube-hype-manual');
+    const topicRanking = buildTopicRanking(orderedLeaders, hype.videos);
 
     return (
       <main className={styles.page}>
@@ -160,6 +209,35 @@ export default async function Home() {
           ) : <div className={styles.hypeUnavailable}>Ainda não existe um ranking Hype válido salvo. A descoberta automática do YouTube está temporariamente limitada pela cota de Search Queries.</div>}
 
           {hype.apiWarning ? <div className={styles.hypeWarning}>O ranking salvo continua disponível, mas a atualização de metadados do YouTube falhou: {hype.apiWarning}</div> : null}
+        </section>
+
+        <section className={styles.sectionBlock} aria-labelledby="topics-heading">
+          <div className={styles.sectionHeader}>
+            <div>
+              <p className={styles.eyebrow}>8 VÍDEOS · TEMAS / SATURAÇÃO</p>
+              <h2 id="topics-heading">Ranking de temas</h2>
+              <p>
+                Universo provisório restrito aos 4 líderes de 24h e aos 4 vídeos do ranking Hype. A classificação é semântica,
+                próxima de tags: temas específicos permanecem separados, enquanto a sobreposição entre tags aumenta a pressão
+                de saturação. A curva preserva a lógica `sigmoid-saturation-v1` usada nas versões anteriores do projeto.
+              </p>
+            </div>
+            <div className={styles.hypeTimestamp}>
+              <strong>{topicRanking.universeVideoCount} vídeos analisados</strong>
+              <span>X / Twitter será a próxima camada de sinal externo</span>
+            </div>
+          </div>
+
+          <div className={styles.topicRanking}>
+            {topicRanking.topics.map((topic) => <TopicRankingRow key={topic.key} topic={topic} />)}
+          </div>
+
+          <div className={styles.topicMethodNote}>
+            <strong>Leitura atual:</strong> Oportunidade combina momentum, breakout relativo ao tamanho do canal, atenção e espaço
+            antes da saturação. Saturação considera repetição exata e proximidade semântica entre tags. Os valores são proxies
+            relativos apenas a estes 8 vídeos; ainda não representam todo o YouTube Brasil. Sinais do X entram depois como volume,
+            velocidade e engajamento externos, sem substituir os sinais do YouTube.
+          </div>
         </section>
 
         <div className={styles.note}>
