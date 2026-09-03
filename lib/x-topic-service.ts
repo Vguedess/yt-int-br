@@ -170,7 +170,7 @@ export async function enrichTopicRankingWithX(base: TopicRankingSnapshot): Promi
           status: 'unavailable', observedAt: null, trendRank: null, matchedTrends: [], trendPostCount: null,
           totalPosts24h: null, latestHourPosts: null, velocityPct: null, accelerationPct: null,
           xMomentumScore: null, volumeBasis: null, geographyBasis: 'BR-WOEID-23424768'
-        }
+        } satisfies XTopicSignal
       }))
     };
   }
@@ -188,7 +188,7 @@ export async function enrichTopicRankingWithX(base: TopicRankingSnapshot): Promi
     .filter((item): item is StoredXTopicCount => Boolean(item))
     .map((item) => Math.log10(item.totalPosts24h + 1));
 
-  const topics: XEnrichedTopic[] = base.topics.map((topic, index) => {
+  const topics: XEnrichedTopic[] = base.topics.map((topic, index): XEnrichedTopic => {
     const count = countResults[index];
     const trendMatch = trends ? matchTopicToTrends(topic, trends) : { rank: null, names: [], postCount: null };
     const rankScore = trendRankScore(trendMatch.rank);
@@ -210,6 +210,20 @@ export async function enrichTopicRankingWithX(base: TopicRankingSnapshot): Promi
     const combinedOpportunity = xMomentumScore == null
       ? topic.opportunityScore
       : clampScore(topic.opportunityScore * 0.80 + xMomentumScore * 0.20);
+    const xSignal: XTopicSignal = {
+      status: trends || count ? (trends && count ? 'enriched' : 'partial') : 'unavailable',
+      observedAt: count?.observedHour ?? trends?.observedAt ?? null,
+      trendRank: trendMatch.rank,
+      matchedTrends: trendMatch.names,
+      trendPostCount: trendMatch.postCount,
+      totalPosts24h: count?.totalPosts24h ?? null,
+      latestHourPosts: count?.latestHourPosts ?? null,
+      velocityPct: count?.velocityPct ?? null,
+      accelerationPct: count?.accelerationPct ?? null,
+      xMomentumScore,
+      volumeBasis: count ? 'lang-pt-recent-counts' : null,
+      geographyBasis: 'BR-WOEID-23424768'
+    };
 
     return {
       ...topic,
@@ -217,20 +231,7 @@ export async function enrichTopicRankingWithX(base: TopicRankingSnapshot): Promi
       opportunityScore: combinedOpportunity,
       youtubeMomentumScore: topic.momentumScore,
       youtubeOpportunityScore: topic.opportunityScore,
-      xSignal: {
-        status: trends || count ? (trends && count ? 'enriched' : 'partial') : 'unavailable',
-        observedAt: count?.observedHour ?? trends?.observedAt ?? null,
-        trendRank: trendMatch.rank,
-        matchedTrends: trendMatch.names,
-        trendPostCount: trendMatch.postCount,
-        totalPosts24h: count?.totalPosts24h ?? null,
-        latestHourPosts: count?.latestHourPosts ?? null,
-        velocityPct: count?.velocityPct ?? null,
-        accelerationPct: count?.accelerationPct ?? null,
-        xMomentumScore,
-        volumeBasis: count ? 'lang-pt-recent-counts' : null,
-        geographyBasis: 'BR-WOEID-23424768'
-      }
+      xSignal
     };
   }).sort((a, b) => b.opportunityScore - a.opportunityScore || b.momentumScore - a.momentumScore)
     .map((topic, index) => ({ ...topic, rank: index + 1 }));
