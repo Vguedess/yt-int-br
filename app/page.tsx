@@ -1,5 +1,6 @@
 import Image from 'next/image';
 import { LeaderRefreshButton } from '@/app/components/LeaderRefreshButton';
+import { HypeManualEditor } from '@/app/components/HypeManualEditor';
 import styles from '@/app/leaders.module.css';
 import { getLeaderDashboard } from '@/lib/youtube-category-leader-service';
 import { getHypeDashboard, type HypeVideoCard } from '@/lib/youtube-hype-service';
@@ -165,6 +166,7 @@ export default async function Home() {
     const orderedLeaders = CATEGORY_ORDER.map((key) => leaderMap.get(key)).filter((leader): leader is CategoryLeader => Boolean(leader));
     const missingCategories = CATEGORY_ORDER.filter((key) => !leaderMap.has(key));
     const hasManualHype = hype.videos.some((video) => video.sourceKind === 'youtube-hype-manual');
+    const manualCount = hype.manualVideoIds?.length ?? (hasManualHype ? hype.videos.length : 0);
     const topicRanking = await enrichTopicRankingWithX(buildTopicRanking(orderedLeaders, hype.videos));
 
     return (
@@ -172,6 +174,21 @@ export default async function Home() {
         <header className={styles.header}>
           <div><p className={styles.eyebrow}>YouTube Intelligence</p><h1>Líderes · 24h</h1></div>
           <div className={styles.headerActions}>
+            <a
+              href="/vguedess"
+              style={{
+                padding: '10px 13px',
+                border: '1px solid rgba(255,255,255,.14)',
+                borderRadius: 12,
+                color: '#f4f6f8',
+                background: 'rgba(255,255,255,.045)',
+                fontSize: '.72rem',
+                fontWeight: 750,
+                textDecoration: 'none'
+              }}
+            >
+              Radar @vguedess →
+            </a>
             <a
               href="/studio"
               style={{
@@ -218,17 +235,19 @@ export default async function Home() {
               <p className={styles.eyebrow}>BRASIL · HYPE</p>
               <h2 id="hype-heading">Mais Hypados</h2>
               <p>{hasManualHype
-                ? 'Top 4 informado a partir da lista Hype do YouTube Brasil, já com exclusão de música e conteúdo infantil. As posições abaixo preservam a ordem do ranking informado.'
+                ? `Ranking manual do YouTube Hype Brasil com ${manualCount} posição(ões) salvas. A lista fica consolidada no banco até a próxima atualização manual; as posições preservam a ordem informada.`
                 : 'Os quatro vídeos com maior Hype Score no último snapshot válido do nosso modelo, considerando força viral, Network Escape, breakout, velocidade, engajamento e dificuldade estrutural do canal.'}</p>
             </div>
-            {hype.observedHour ? <div className={styles.hypeTimestamp}><strong>{hasManualHype ? 'Ranking registrado' : 'Último snapshot de Hype'}</strong><span>{formatDateTime(hype.observedHour)}</span></div> : null}
+            {hype.observedHour ? <div className={styles.hypeTimestamp}><strong>{hasManualHype ? 'Ranking manual ativo' : 'Último snapshot de Hype'}</strong><span>{formatDateTime(hype.observedHour)}</span></div> : null}
           </div>
 
+          <HypeManualEditor currentVideoIds={hype.manualVideoIds ?? []} observedAt={hype.observedHour} />
+
           {hype.videos.length ? (
-            <section className={styles.grid} aria-label="Quatro vídeos mais hypados no mercado brasileiro">
+            <section className={styles.grid} aria-label={`${hype.videos.length} vídeos mais hypados no mercado brasileiro`}>
               {hype.videos.map((video) => <HypeCard key={video.videoId} video={video} />)}
             </section>
-          ) : <div className={styles.hypeUnavailable}>Ainda não existe um ranking Hype válido salvo. A descoberta automática do YouTube está temporariamente limitada pela cota de Search Queries.</div>}
+          ) : <div className={styles.hypeUnavailable}>Ainda não existe um ranking Hype válido salvo. Use a atualização manual para registrar o Top 10 atual.</div>}
 
           {hype.apiWarning ? <div className={styles.hypeWarning}>O ranking salvo continua disponível, mas a atualização de metadados do YouTube falhou: {hype.apiWarning}</div> : null}
         </section>
@@ -236,10 +255,10 @@ export default async function Home() {
         <section className={styles.sectionBlock} aria-labelledby="topics-heading">
           <div className={styles.sectionHeader}>
             <div>
-              <p className={styles.eyebrow}>8 VÍDEOS · TEMAS / SATURAÇÃO + X BRASIL</p>
+              <p className={styles.eyebrow}>{topicRanking.universeVideoCount} VÍDEOS · TEMAS / SATURAÇÃO + X BRASIL</p>
               <h2 id="topics-heading">Ranking de temas</h2>
               <p>
-                Universo provisório restrito aos 4 líderes de 24h e aos 4 vídeos do ranking Hype. A classificação é semântica,
+                Universo provisório composto pelos 4 líderes de 24h e pelos {hype.videos.length} vídeos atualmente ativos no ranking Hype. A classificação é semântica,
                 próxima de tags. O X adiciona Trends do Brasil por WOEID e volume recente em português para medir interesse e dinâmica externa.
               </p>
             </div>
