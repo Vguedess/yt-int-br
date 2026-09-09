@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { SiteTabs } from '@/app/components/SiteTabs';
 import './globals.css';
 
 export const metadata: Metadata = {
@@ -9,7 +10,10 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="pt-BR">
-      <body>{children}</body>
+      <body>
+        <SiteTabs />
+        {children}
+      </body>
     </html>
   );
 }
