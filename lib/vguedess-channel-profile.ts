@@ -257,10 +257,17 @@ function topicText(topic: XEnrichedTopic): string {
   return normalize(`${topic.label} ${topic.tags.join(' ')}`);
 }
 
+function hasKeyword(haystack: string, keyword: string): boolean {
+  const needle = normalize(keyword);
+  if (!needle) return false;
+  if (needle.includes(' ')) return haystack.includes(needle);
+  return new Set(haystack.split(' ').filter(Boolean)).has(needle);
+}
+
 function matchingInterest(topic: XEnrichedTopic): VguedessInterest | null {
   const haystack = topicText(topic);
   const matches = VGUEDESS_INTERESTS.filter((interest) =>
-    interest.keywords.some((keyword) => haystack.includes(normalize(keyword)))
+    interest.keywords.some((keyword) => hasKeyword(haystack, keyword))
   );
   return matches.sort((a, b) => b.weight - a.weight)[0] ?? null;
 }
@@ -285,7 +292,7 @@ function recentTopicOverlap(topic: XEnrichedTopic, profile: VguedessChannelProfi
   const now = Date.now();
   for (const video of profile.recentVideos) {
     const title = normalize(video.title);
-    const matched = needles.filter((needle) => title.includes(needle)).length;
+    const matched = needles.filter((needle) => new Set(title.split(' ')).has(needle)).length;
     const similarity = matched / Math.max(1, Math.min(needles.length, 5));
     if (similarity < 0.2) continue;
     count += 1;
@@ -319,15 +326,15 @@ export function personalizeRankingForVguedess(
     const fatiguePenalty = overlap.penalty;
     const freshnessScore = clamp(100 - fatiguePenalty);
 
-    // Market opportunity remains the dominant signal. Personal fit acts as a constraint/utility layer,
-    // while recent repetition applies a direct penalty instead of pretending the market stopped moving.
-    const base = topic.opportunityScore * 0.64 + interestFitScore * 0.24 + freshnessScore * 0.12;
+    // The market creates candidates, but fit is intentionally a strong utility/constraint layer.
+    // This prevents a generic viral topic from dominating the personalized ranking solely on demand.
+    const base = topic.opportunityScore * 0.52 + interestFitScore * 0.36 + freshnessScore * 0.12;
     const personalizedOpportunityScore = clamp(base - fatiguePenalty * 0.45);
 
     let decision: VguedessTopicDecision['decision'] = 'OBSERVAR';
     if (interestFitScore < 45) decision = 'FORA_DO_FOCO';
     else if (fatiguePenalty >= 36 && personalizedOpportunityScore < 82) decision = 'EVITAR_REPETICAO';
-    else if (personalizedOpportunityScore >= 74 && topic.saturationScore < 60) decision = 'PRIORIDADE_ALTA';
+    else if (personalizedOpportunityScore >= 74 && interestFitScore >= 75 && topic.saturationScore < 60) decision = 'PRIORIDADE_ALTA';
     else if (personalizedOpportunityScore >= 60 && topic.saturationScore < 76) decision = 'CONSIDERAR';
 
     const positiveReasons: string[] = [];
@@ -343,7 +350,7 @@ export function personalizeRankingForVguedess(
 
     if (fatiguePenalty >= 20) cautionReasons.push(`Possível repetição no canal: penalidade ${fatiguePenalty}/55`);
     if (topic.saturationScore >= 60) cautionReasons.push(`Saturação já elevada: ${topic.saturationScore}/100`);
-    if (interestFitScore < 60) cautionReasons.push('Baixa aderência ao foco editorial definido para @vguedess');
+    if (interestFitScore < 75) cautionReasons.push('Aderência moderada ou baixa: não elevar a prioridade só porque o mercado está forte');
     if (!profile) cautionReasons.push('Histórico recente do canal indisponível; fadiga não pôde ser medida');
     if (!positiveReasons.length) positiveReasons.push('Tema ainda em observação; não há sinal forte isolado suficiente');
 
