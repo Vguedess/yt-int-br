@@ -57,6 +57,7 @@ export type HypeDashboard = {
     | 'no-history';
   sourceLabel?: string;
   filters?: string[];
+  manualVideoIds?: string[];
   apiWarning?: string;
 };
 
@@ -128,7 +129,7 @@ function subscriberCount(channel: YouTubeChannel | undefined): number | null {
   return channel.statistics?.subscriberCount ? numeric(channel.statistics.subscriberCount) : null;
 }
 
-function enforceContentPolicy(cards: HypeVideoCard[]): HypeVideoCard[] {
+function enforceContentPolicy(cards: HypeVideoCard[], limit: number): HypeVideoCard[] {
   return cards
     .filter((card) => evaluateContentEligibility({
       videoId: card.videoId,
@@ -136,7 +137,7 @@ function enforceContentPolicy(cards: HypeVideoCard[]): HypeVideoCard[] {
       channelTitle: card.channelTitle,
       durationSeconds: card.durationSeconds ?? undefined
     }).allowed)
-    .slice(0, 4)
+    .slice(0, limit)
     .map((card, index) => ({ ...card, rank: index + 1 }));
 }
 
@@ -174,7 +175,7 @@ export async function getHypeDashboard(): Promise<HypeDashboard> {
         viralForce: null,
         nodeTier: null
       } satisfies HypeVideoCard;
-    }));
+    }), 10);
 
     return {
       market: 'BR',
@@ -183,6 +184,7 @@ export async function getHypeDashboard(): Promise<HypeDashboard> {
       source: hydrated.videos.size ? 'youtube-hype-manual-plus-youtube-hydration' : 'youtube-hype-manual',
       sourceLabel: manual.source,
       filters: manual.filters,
+      manualVideoIds: manual.videoIds,
       apiWarning
     };
   }
@@ -221,7 +223,7 @@ export async function getHypeDashboard(): Promise<HypeDashboard> {
       viralForce: video.viralForce,
       nodeTier: video.nodeTier
     } satisfies HypeVideoCard;
-  }));
+  }), 4);
 
   return {
     market: 'BR',
