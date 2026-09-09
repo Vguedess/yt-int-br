@@ -1,0 +1,174 @@
+.editor {
+  margin: 14px 0 18px;
+}
+
+.toggle {
+  border: 1px solid rgba(255,255,255,.14);
+  background: rgba(255,255,255,.05);
+  color: #f4f6f8;
+  border-radius: 12px;
+  padding: 10px 13px;
+  font-size: .74rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.toggle:hover {
+  background: rgba(255,255,255,.08);
+}
+
+.panel {
+  margin-top: 10px;
+  padding: 16px;
+  border: 1px solid rgba(255,255,255,.1);
+  border-radius: 16px;
+  background: rgba(255,255,255,.03);
+  display: grid;
+  gap: 14px;
+}
+
+.heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+}
+
+.heading strong {
+  display: block;
+  font-size: .92rem;
+  margin-bottom: 5px;
+}
+
+.heading p {
+  margin: 0;
+  max-width: 820px;
+  color: rgba(244,246,248,.62);
+  font-size: .75rem;
+  line-height: 1.5;
+}
+
+.heading > span {
+  flex: none;
+  color: rgba(244,246,248,.46);
+  font-size: .68rem;
+}
+
+.inputs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+}
+
+.row > span {
+  font-size: .75rem;
+  font-weight: 850;
+  color: rgba(244,246,248,.72);
+}
+
+.row input,
+.secretRow input {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  border: 1px solid rgba(255,255,255,.1);
+  border-radius: 10px;
+  padding: 9px 10px;
+  background: rgba(0,0,0,.22);
+  color: #f4f6f8;
+  outline: none;
+  font-size: .73rem;
+}
+
+.row input:focus,
+.secretRow input:focus {
+  border-color: rgba(255,255,255,.28);
+}
+
+.secretRow {
+  display: grid;
+  grid-template-columns: 155px minmax(0, 420px);
+  gap: 10px;
+  align-items: center;
+}
+
+.secretRow > span {
+  color: rgba(244,246,248,.62);
+  font-size: .72rem;
+  font-weight: 750;
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.actions button {
+  border: 1px solid rgba(255,255,255,.16);
+  background: #f4f6f8;
+  color: #111317;
+  border-radius: 11px;
+  padding: 10px 13px;
+  font-size: .73rem;
+  font-weight: 850;
+  cursor: pointer;
+}
+
+.actions button:disabled {
+  opacity: .55;
+  cursor: wait;
+}
+
+.actions span {
+  color: rgba(244,246,248,.46);
+  font-size: .68rem;
+}
+
+.message,
+.error,
+.success {
+  padding: 10px 11px;
+  border-radius: 10px;
+  font-size: .72rem;
+  line-height: 1.4;
+}
+
+.message {
+  background: rgba(255,255,255,.04);
+  color: rgba(244,246,248,.68);
+}
+
+.success {
+  background: rgba(120,255,180,.07);
+  border: 1px solid rgba(120,255,180,.15);
+  color: rgba(222,255,233,.9);
+}
+
+.error {
+  background: rgba(255,110,110,.07);
+  border: 1px solid rgba(255,110,110,.17);
+  color: rgba(255,220,220,.92);
+}
+
+@media (max-width: 760px) {
+  .inputs {
+    grid-template-columns: 1fr;
+  }
+
+  .heading {
+    flex-direction: column;
+  }
+
+  .secretRow {
+    grid-template-columns: 1fr;
+  }
+}
