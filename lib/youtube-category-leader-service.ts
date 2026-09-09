@@ -1,4 +1,5 @@
 import { collectCategoryLeaders24h } from '@/lib/youtube-category-leaders';
+import { evaluateContentEligibility } from '@/lib/content-policy';
 import {
   CATEGORY_LEADER_REFRESH_INTERVAL_HOURS,
   getLatestCategoryLeaderDashboard,
@@ -15,6 +16,19 @@ export type RefreshLeaderResult = {
 
 const REQUIRED_CATEGORIES = ['news-politics', 'science-tech', 'economia', 'entretenimento'] as const;
 
+function enforceContentPolicy(dashboard: LeaderDashboard | null): LeaderDashboard | null {
+  if (!dashboard) return null;
+  return {
+    ...dashboard,
+    leaders: dashboard.leaders.filter((leader) => evaluateContentEligibility({
+      videoId: leader.videoId,
+      title: leader.title,
+      channelTitle: leader.channelTitle,
+      durationSeconds: leader.durationSeconds ?? undefined
+    }).allowed)
+  };
+}
+
 function isComplete(dashboard: LeaderDashboard | null): dashboard is LeaderDashboard {
   if (!dashboard) return false;
   const keys = new Set(dashboard.leaders.map((leader) => leader.categoryKey));
@@ -29,18 +43,18 @@ async function collectAndPersist(): Promise<LeaderDashboard> {
   }
 
   await persistCategoryLeaderCollection(collection);
-  const dashboard = await getLatestCategoryLeaderDashboard();
+  const dashboard = enforceContentPolicy(await getLatestCategoryLeaderDashboard());
   if (!dashboard) throw new Error('A coleta foi concluída, mas não pôde ser lida do banco.');
   return dashboard;
 }
 
 export async function getLeaderDashboard(): Promise<LeaderDashboard> {
-  const existing = await getLatestCategoryLeaderDashboard();
+  const existing = enforceContentPolicy(await getLatestCategoryLeaderDashboard());
   if (isComplete(existing)) return existing;
 
   try {
     return await withCategoryLeaderRefreshLock(async () => {
-      const afterLock = await getLatestCategoryLeaderDashboard();
+      const afterLock = enforceContentPolicy(await getLatestCategoryLeaderDashboard());
       if (isComplete(afterLock)) return afterLock;
       return collectAndPersist();
     });
@@ -52,7 +66,7 @@ export async function getLeaderDashboard(): Promise<LeaderDashboard> {
 
 export async function refreshLeaderDashboardIfAllowed(): Promise<RefreshLeaderResult> {
   return withCategoryLeaderRefreshLock(async () => {
-    const existing = await getLatestCategoryLeaderDashboard();
+    const existing = enforceContentPolicy(await getLatestCategoryLeaderDashboard());
 
     if (existing && !isComplete(existing)) {
       const dashboard = await collectAndPersist();
