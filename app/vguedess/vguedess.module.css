@@ -1,0 +1,370 @@
+.profileHero {
+  display: grid;
+  grid-template-columns: minmax(0, 1.45fr) minmax(280px, .75fr);
+  gap: 20px;
+  align-items: stretch;
+  margin: 18px 0 22px;
+}
+
+.profileHeroCopy,
+.channelPanel,
+.opportunityCard,
+.interestPanel,
+.recentPanel {
+  border: 1px solid rgba(255,255,255,.09);
+  border-radius: 18px;
+  background: rgba(255,255,255,.035);
+}
+
+.profileHeroCopy {
+  padding: 24px;
+}
+
+.profileHeroCopy h2 {
+  margin: 5px 0 10px;
+  font-size: clamp(1.65rem, 3vw, 2.65rem);
+  letter-spacing: -.035em;
+  line-height: 1.03;
+}
+
+.profileHeroCopy p {
+  margin: 0;
+  max-width: 880px;
+  color: rgba(244,246,248,.72);
+  line-height: 1.65;
+}
+
+.channelPanel {
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.channelIdentity {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.channelIdentity span,
+.smallLabel {
+  color: rgba(244,246,248,.53);
+  font-size: .72rem;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  font-weight: 750;
+}
+
+.channelIdentity strong {
+  font-size: 1.18rem;
+}
+
+.channelStats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.channelStat {
+  padding: 10px;
+  border-radius: 12px;
+  background: rgba(255,255,255,.04);
+}
+
+.channelStat span {
+  display: block;
+  color: rgba(244,246,248,.5);
+  font-size: .68rem;
+  margin-bottom: 4px;
+}
+
+.channelStat strong {
+  font-size: .9rem;
+}
+
+.sectionIntro {
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  align-items: end;
+  margin-bottom: 14px;
+}
+
+.sectionIntro h2 {
+  margin: 4px 0 6px;
+  font-size: clamp(1.35rem, 2.4vw, 2rem);
+  letter-spacing: -.025em;
+}
+
+.sectionIntro p {
+  margin: 0;
+  max-width: 860px;
+  color: rgba(244,246,248,.64);
+  line-height: 1.55;
+}
+
+.personalGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.opportunityCard {
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.opportunityTop {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: start;
+}
+
+.rankBlock {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+}
+
+.personalRank {
+  font-size: 1.9rem;
+  font-weight: 850;
+  letter-spacing: -.05em;
+}
+
+.marketRank {
+  color: rgba(244,246,248,.42);
+  font-size: .72rem;
+}
+
+.decisionBadge {
+  border: 1px solid rgba(255,255,255,.12);
+  background: rgba(255,255,255,.05);
+  border-radius: 999px;
+  padding: 6px 9px;
+  font-size: .66rem;
+  letter-spacing: .05em;
+  font-weight: 800;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.opportunityCard h3 {
+  margin: 0;
+  font-size: 1.08rem;
+  line-height: 1.28;
+}
+
+.scoreHero {
+  display: flex;
+  justify-content: space-between;
+  align-items: end;
+  gap: 12px;
+  padding: 13px;
+  border-radius: 14px;
+  background: rgba(255,255,255,.04);
+}
+
+.scoreHero span {
+  color: rgba(244,246,248,.56);
+  font-size: .73rem;
+}
+
+.scoreHero strong {
+  font-size: 2rem;
+  letter-spacing: -.055em;
+}
+
+.metrics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.metric {
+  padding: 9px 10px;
+  border-radius: 11px;
+  background: rgba(255,255,255,.03);
+}
+
+.metric span {
+  display: block;
+  color: rgba(244,246,248,.48);
+  font-size: .66rem;
+  margin-bottom: 3px;
+}
+
+.metric strong {
+  font-size: .85rem;
+}
+
+.formatBox {
+  padding: 11px;
+  border-left: 2px solid rgba(255,255,255,.23);
+  background: rgba(255,255,255,.025);
+  border-radius: 0 10px 10px 0;
+}
+
+.formatBox span {
+  display: block;
+  color: rgba(244,246,248,.48);
+  font-size: .66rem;
+  margin-bottom: 5px;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+}
+
+.formatBox p {
+  margin: 0;
+  font-size: .83rem;
+  line-height: 1.45;
+}
+
+.reasonBlock {
+  display: grid;
+  gap: 5px;
+}
+
+.reasonBlock strong {
+  font-size: .72rem;
+}
+
+.reasonBlock span {
+  color: rgba(244,246,248,.61);
+  font-size: .76rem;
+  line-height: 1.4;
+}
+
+.cardFooter {
+  margin-top: auto;
+  padding-top: 2px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  color: rgba(244,246,248,.45);
+  font-size: .68rem;
+}
+
+.constraintGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 14px;
+}
+
+.interestPanel,
+.recentPanel {
+  padding: 18px;
+}
+
+.interestPanel h3,
+.recentPanel h3 {
+  margin: 0 0 12px;
+  font-size: 1rem;
+}
+
+.interestList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.interestChip {
+  display: inline-flex;
+  gap: 7px;
+  align-items: center;
+  border: 1px solid rgba(255,255,255,.1);
+  background: rgba(255,255,255,.035);
+  border-radius: 999px;
+  padding: 7px 10px;
+  font-size: .74rem;
+}
+
+.interestChip strong {
+  font-size: .68rem;
+  color: rgba(244,246,248,.52);
+}
+
+.benchmarkRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-top: 14px;
+}
+
+.benchmarkRow span {
+  padding: 6px 9px;
+  border-radius: 9px;
+  background: rgba(255,255,255,.035);
+  color: rgba(244,246,248,.58);
+  font-size: .71rem;
+}
+
+.recentList {
+  display: grid;
+  gap: 8px;
+}
+
+.recentItem {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(255,255,255,.06);
+}
+
+.recentItem:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
+.recentItem strong {
+  font-size: .78rem;
+  line-height: 1.35;
+  font-weight: 650;
+}
+
+.recentItem span {
+  color: rgba(244,246,248,.45);
+  font-size: .68rem;
+  white-space: nowrap;
+}
+
+.inlineNav {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.inlineNav a {
+  padding: 10px 13px;
+  border: 1px solid rgba(255,255,255,.14);
+  border-radius: 12px;
+  color: #f4f6f8;
+  background: rgba(255,255,255,.045);
+  font-size: .72rem;
+  font-weight: 750;
+  text-decoration: none;
+}
+
+.methodNote {
+  margin-top: 12px;
+  color: rgba(244,246,248,.5);
+  font-size: .72rem;
+  line-height: 1.55;
+}
+
+@media (max-width: 1040px) {
+  .personalGrid { grid-template-columns: 1fr; }
+  .profileHero { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 760px) {
+  .constraintGrid { grid-template-columns: 1fr; }
+  .sectionIntro { align-items: start; flex-direction: column; }
+  .channelStats { grid-template-columns: 1fr 1fr 1fr; }
+}
