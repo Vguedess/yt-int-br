@@ -2,6 +2,7 @@ import {
   getLatestHistoricalHypeVideos,
   getLatestManualHypeSnapshot
 } from '@/lib/youtube-history-db';
+import { evaluateContentEligibility } from '@/lib/content-policy';
 
 const YOUTUBE_API_ROOT = 'https://www.googleapis.com/youtube/v3';
 
@@ -127,6 +128,18 @@ function subscriberCount(channel: YouTubeChannel | undefined): number | null {
   return channel.statistics?.subscriberCount ? numeric(channel.statistics.subscriberCount) : null;
 }
 
+function enforceContentPolicy(cards: HypeVideoCard[]): HypeVideoCard[] {
+  return cards
+    .filter((card) => evaluateContentEligibility({
+      videoId: card.videoId,
+      title: card.title,
+      channelTitle: card.channelTitle,
+      durationSeconds: card.durationSeconds ?? undefined
+    }).allowed)
+    .slice(0, 4)
+    .map((card, index) => ({ ...card, rank: index + 1 }));
+}
+
 export async function getHypeDashboard(): Promise<HypeDashboard> {
   const manual = await getLatestManualHypeSnapshot('BR');
   if (manual?.videoIds.length) {
@@ -138,7 +151,7 @@ export async function getHypeDashboard(): Promise<HypeDashboard> {
       apiWarning = error instanceof Error ? error.message : 'Falha ao hidratar ranking Hype do YouTube.';
     }
 
-    const videos = manual.videoIds.map((videoId, index) => {
+    const videos = enforceContentPolicy(manual.videoIds.map((videoId, index) => {
       const current = hydrated.videos.get(videoId);
       const channelId = current?.snippet?.channelId ?? '';
       const channel = hydrated.channels.get(channelId);
@@ -161,7 +174,7 @@ export async function getHypeDashboard(): Promise<HypeDashboard> {
         viralForce: null,
         nodeTier: null
       } satisfies HypeVideoCard;
-    });
+    }));
 
     return {
       market: 'BR',
@@ -174,7 +187,7 @@ export async function getHypeDashboard(): Promise<HypeDashboard> {
     };
   }
 
-  const history = await getLatestHistoricalHypeVideos(4);
+  const history = await getLatestHistoricalHypeVideos(20);
   if (!history.videos.length) {
     return { market: 'BR', observedHour: history.observedHour, videos: [], source: 'no-history' };
   }
@@ -187,7 +200,7 @@ export async function getHypeDashboard(): Promise<HypeDashboard> {
     apiWarning = error instanceof Error ? error.message : 'Falha ao hidratar os vídeos atuais do YouTube.';
   }
 
-  const videos = history.videos.map((video, index) => {
+  const videos = enforceContentPolicy(history.videos.map((video, index) => {
     const current = hydrated.videos.get(video.videoId);
     return {
       rank: index + 1,
@@ -208,7 +221,7 @@ export async function getHypeDashboard(): Promise<HypeDashboard> {
       viralForce: video.viralForce,
       nodeTier: video.nodeTier
     } satisfies HypeVideoCard;
-  });
+  }));
 
   return {
     market: 'BR',
