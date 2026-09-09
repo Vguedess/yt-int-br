@@ -22,6 +22,12 @@ export const GLOBAL_CONTENT_POLICY = {
     'tex hs',
     'favela sound'
   ],
+  // Curadoria explícita do projeto. A razão é interna e não deve ser exibida
+  // como acusação factual sobre o canal; serve apenas para excluir fontes que
+  // o usuário decidiu não usar como referência editorial ou sinal de oportunidade.
+  editorialExcludedChannels: [
+    'carol capel'
+  ],
   musicMarkers: [
     'official music video',
     'clipe oficial',
@@ -132,6 +138,13 @@ function containsAny(value: string, markers: readonly string[]): boolean {
   return markers.some((marker) => normalized.includes(normalize(marker)));
 }
 
+export function isEditoriallyExcludedChannel(channelTitle: string): boolean {
+  const normalizedChannel = normalize(channelTitle);
+  return GLOBAL_CONTENT_POLICY.editorialExcludedChannels.some((blocked) =>
+    normalizedChannel.includes(normalize(blocked))
+  );
+}
+
 export function evaluateContentEligibility(candidate: ContentCandidate): ContentEligibility {
   const reasons: string[] = [];
   const channelText = `${candidate.channelTitle} ${candidate.channelDescription ?? ''}`;
@@ -186,6 +199,10 @@ export function evaluateContentEligibility(candidate: ContentCandidate): Content
     )
   ) {
     reasons.push('preteen-channel-blocklist');
+  }
+
+  if (isEditoriallyExcludedChannel(candidate.channelTitle)) {
+    reasons.push('editorial-channel-exclusion');
   }
 
   return {
