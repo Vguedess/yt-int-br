@@ -11,16 +11,23 @@ type YouTubeVideo = {
   id?: string;
   snippet?: {
     title?: string;
+    description?: string;
+    tags?: string[];
+    categoryId?: string;
+    liveBroadcastContent?: string;
     channelId?: string;
     channelTitle?: string;
     publishedAt?: string;
     thumbnails?: Record<string, Thumbnail>;
   };
   contentDetails?: { duration?: string };
+  status?: { madeForKids?: boolean };
   statistics?: { viewCount?: string; likeCount?: string; commentCount?: string };
 };
 type YouTubeChannel = {
   id?: string;
+  snippet?: { description?: string };
+  status?: { madeForKids?: boolean };
   statistics?: { subscriberCount?: string; hiddenSubscriberCount?: boolean };
 };
 type YouTubeListResponse<T> = { items?: T[] };
@@ -104,7 +111,7 @@ async function hydrateVideoMetadata(videoIds: string[]): Promise<{
   if (!ids.length) return { videos: new Map(), channels: new Map() };
 
   const videoPayload = await youtubeFetch<YouTubeListResponse<YouTubeVideo>>('videos', {
-    part: 'snippet,contentDetails,statistics',
+    part: 'snippet,contentDetails,status,statistics',
     id: ids.join(','),
     maxResults: '50'
   });
@@ -112,7 +119,7 @@ async function hydrateVideoMetadata(videoIds: string[]): Promise<{
   const channelIds = [...new Set(videoItems.map((item) => item.snippet?.channelId ?? '').filter(Boolean))];
   const channelPayload = channelIds.length
     ? await youtubeFetch<YouTubeListResponse<YouTubeChannel>>('channels', {
-        part: 'statistics',
+        part: 'snippet,status,statistics',
         id: channelIds.join(','),
         maxResults: '50'
       })
@@ -127,6 +134,26 @@ async function hydrateVideoMetadata(videoIds: string[]): Promise<{
 function subscriberCount(channel: YouTubeChannel | undefined): number | null {
   if (!channel || channel.statistics?.hiddenSubscriberCount) return null;
   return channel.statistics?.subscriberCount ? numeric(channel.statistics.subscriberCount) : null;
+}
+
+function isEligibleHypeVideo(
+  card: HypeVideoCard,
+  video: YouTubeVideo | undefined,
+  channel: YouTubeChannel | undefined
+): boolean {
+  return evaluateContentEligibility({
+    videoId: card.videoId,
+    title: card.title,
+    description: video?.snippet?.description,
+    tags: video?.snippet?.tags,
+    categoryId: video?.snippet?.categoryId,
+    durationSeconds: card.durationSeconds ?? undefined,
+    liveBroadcastContent: video?.snippet?.liveBroadcastContent,
+    madeForKids: video?.status?.madeForKids,
+    channelTitle: card.channelTitle,
+    channelDescription: channel?.snippet?.description,
+    channelMadeForKids: channel?.status?.madeForKids
+  }).allowed;
 }
 
 function enforceContentPolicy(cards: HypeVideoCard[], limit: number): HypeVideoCard[] {
@@ -177,10 +204,14 @@ export async function getHypeDashboard(): Promise<HypeDashboard> {
       } satisfies HypeVideoCard;
     });
 
-    const playlistOrderIsAuthoritative = manual.filters.includes('playlist_order_top_10');
-    const videos = playlistOrderIsAuthoritative
-      ? rankedCards
-      : enforceContentPolicy(rankedCards, 10);
+    // O snapshot guarda sempre o Top 10 oficial inteiro. A política editorial é aplicada
+    // somente na exibição. Itens removidos não são substituídos pelo #11+ e o rank oficial
+    // é preservado (ex.: se HYPE #2 for filtrado, HYPE #3 continua sendo HYPE #3).
+    const videos = rankedCards.filter((card) => {
+      const current = hydrated.videos.get(card.videoId);
+      const channel = hydrated.channels.get(card.channelId);
+      return isEligibleHypeVideo(card, current, channel);
+    });
 
     return {
       market: 'BR',
