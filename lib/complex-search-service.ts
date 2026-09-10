@@ -3,9 +3,10 @@ import { getHypeDashboard } from '@/lib/youtube-hype-service';
 import { buildTopicRanking, type TopicEvidenceVideo } from '@/lib/topic-ranking';
 import { enrichTopicRankingWithX, type XEnrichedTopic } from '@/lib/x-topic-service';
 import { getLatestXTrendSnapshot } from '@/lib/x-trends-db';
+import { getLatestComplexYoutubeSignals, type ComplexYoutubeSignal } from '@/lib/complex-search-market-db';
 import type { ComplexSearchRootTopic } from '@/lib/complex-search-db';
 
-export type ComplexSearchNodeType = 'root' | 'youtube-topic' | 'tag' | 'x-trend';
+export type ComplexSearchNodeType = 'root' | 'youtube-topic' | 'youtube-video' | 'tag' | 'x-trend';
 
 export type ComplexSearchGraphNode = {
   id: string;
@@ -103,6 +104,15 @@ function topicRelation(root: ComplexSearchRootTopic, topic: XEnrichedTopic): num
   return direct * 4 + semantic + (phrase ? 6 : 0);
 }
 
+function videoRelation(root: ComplexSearchRootTopic, video: ComplexYoutubeSignal): number {
+  const rootDirect = tokens(root.label);
+  const titleDirect = tokens(video.title);
+  const direct = overlapCount(rootDirect, titleDirect);
+  const contextual = overlapCount(expandedTerms(root.label), expandedTerms(video.title));
+  const phrase = normalize(video.title).includes(normalize(root.label));
+  return direct * 5 + contextual + (phrase ? 8 : 0);
+}
+
 function trendRelation(root: ComplexSearchRootTopic, trendName: string, relatedTopics: XEnrichedTopic[]): number {
   const rootTerms = expandedTerms(root.label);
   const trendTerms = expandedTerms(trendName);
@@ -121,6 +131,15 @@ function safeId(value: string): string {
 }
 
 function youtubeEvidence(video: TopicEvidenceVideo) {
+  return {
+    kind: 'youtube' as const,
+    label: video.title,
+    detail: video.channelTitle,
+    url: `https://www.youtube.com/watch?v=${video.videoId}`
+  };
+}
+
+function rawYoutubeEvidence(video: ComplexYoutubeSignal) {
   return {
     kind: 'youtube' as const,
     label: video.title,
@@ -170,8 +189,14 @@ export async function buildComplexSearchGraph(roots: ComplexSearchRootTopic[]): 
   }
 
   let topics: XEnrichedTopic[] = [];
+  let widerYoutube: ComplexYoutubeSignal[] = [];
   try {
-    const [leaders, hype] = await Promise.all([getLeaderDashboard(), getHypeDashboard()]);
+    const [leaders, hype, collected] = await Promise.all([
+      getLeaderDashboard(),
+      getHypeDashboard(),
+      getLatestComplexYoutubeSignals(100)
+    ]);
+    widerYoutube = collected;
     const base = buildTopicRanking(leaders.leaders.slice(0, 4), hype.videos.slice(0, 4));
     topics = (await enrichTopicRankingWithX(base)).topics;
   } catch (error) {
@@ -246,6 +271,31 @@ export async function buildComplexSearchGraph(roots: ComplexSearchRootTopic[]): 
           relation: 'appears-on-x'
         });
       }
+    }
+
+    const relatedVideos = widerYoutube
+      .map((video) => ({ video, score: videoRelation(root, video) }))
+      .filter((item) => item.score > 0)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 8)
+      .map((item) => item.video);
+
+    for (const video of relatedVideos) {
+      const videoNodeId = `video:${video.videoId}`;
+      addNode(nodes, {
+        id: videoNodeId,
+        label: video.title,
+        type: 'youtube-video',
+        sourceLabel: 'Sinal YouTube · universo coletado',
+        rootIds: [root.id],
+        evidence: [rawYoutubeEvidence(video)]
+      });
+      addEdge(edges, {
+        id: `${rootNodeId}->${videoNodeId}`,
+        source: rootNodeId,
+        target: videoNodeId,
+        relation: 'contains-signal'
+      });
     }
 
     const directTrends = xTrends
