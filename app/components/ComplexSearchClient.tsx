@@ -13,7 +13,7 @@ type RootTopic = {
 type GraphNode = {
   id: string;
   label: string;
-  type: 'root' | 'youtube-topic' | 'tag' | 'x-trend';
+  type: 'root' | 'youtube-topic' | 'youtube-video' | 'tag' | 'x-trend';
   sourceLabel: string;
   rootIds: string[];
   evidence: Array<{
@@ -95,8 +95,9 @@ function buildPositions(nodes: GraphNode[]): Map<string, Position> {
 
   for (const [rootId, children] of grouped) {
     const anchor = rootPositionByStoredId.get(rootId) ?? { x: centerX, y: centerY };
-    const byType: Record<'youtube-topic' | 'tag' | 'x-trend', GraphNode[]> = {
+    const byType: Record<'youtube-topic' | 'youtube-video' | 'tag' | 'x-trend', GraphNode[]> = {
       'youtube-topic': [],
+      'youtube-video': [],
       tag: [],
       'x-trend': []
     };
@@ -114,9 +115,10 @@ function buildPositions(nodes: GraphNode[]): Map<string, Position> {
       });
     };
 
-    place(byType['youtube-topic'], 150, -Math.PI / 2);
-    place(byType.tag, 245, Math.PI / 8);
-    place(byType['x-trend'], 320, Math.PI / 3);
+    place(byType['youtube-topic'], 145, -Math.PI / 2);
+    place(byType['youtube-video'], 205, Math.PI / 5);
+    place(byType.tag, 260, Math.PI / 8);
+    place(byType['x-trend'], 325, Math.PI / 3);
   }
 
   return positions;
@@ -125,8 +127,17 @@ function buildPositions(nodes: GraphNode[]): Map<string, Position> {
 function nodeRadius(type: GraphNode['type']): number {
   if (type === 'root') return 24;
   if (type === 'youtube-topic') return 17;
+  if (type === 'youtube-video') return 12;
   if (type === 'x-trend') return 14;
   return 11;
+}
+
+function styleForNode(type: GraphNode['type']): string {
+  if (type === 'root') return styles.root;
+  if (type === 'youtube-topic') return styles.youtubetopic;
+  if (type === 'youtube-video') return styles.youtubevideo;
+  if (type === 'x-trend') return styles.xtrend;
+  return styles.tag;
 }
 
 function shortLabel(value: string): string {
@@ -159,13 +170,13 @@ export function ComplexSearchClient() {
       }
       setTopics(payload.topics);
       setGraph(payload.graph);
-      if (selectedId && !payload.graph.nodes.some((node) => node.id === selectedId)) setSelectedId(null);
+      setSelectedId((current) => current && payload.graph!.nodes.some((node) => node.id === current) ? current : null);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Falha ao carregar o ComplexSearch.');
     } finally {
       setLoading(false);
     }
-  }, [selectedId]);
+  }, []);
 
   useEffect(() => {
     void load();
@@ -258,7 +269,7 @@ export function ComplexSearchClient() {
         <div className={styles.controlCopy}>
           <span className={styles.eyebrow}>EXTERNAL SEEDS → YOUTUBE / X GRAPH</span>
           <h1>ComplexSearch</h1>
-          <p>Adicione temas grandes ou notórios que você quer acompanhar. O sistema mantém esses temas como âncoras e conecta os sinais que aparecem no radar do YouTube e nas tendências do X.</p>
+          <p>Adicione temas grandes ou notórios que você quer acompanhar. O sistema mantém esses temas como âncoras e conecta clusters, vídeos do universo coletado e tendências que aparecem no YouTube e no X.</p>
         </div>
 
         <form className={styles.form} onSubmit={addTopic}>
@@ -321,6 +332,7 @@ export function ComplexSearchClient() {
         <div className={styles.legend}>
           <span><i className={styles.rootDot} />Tema externo</span>
           <span><i className={styles.youtubeDot} />Cluster YouTube</span>
+          <span><i className={styles.youtubeVideoDot} />Sinal YouTube</span>
           <span><i className={styles.tagDot} />Entidade / tópico</span>
           <span><i className={styles.xDot} />Tendência X</span>
         </div>
@@ -361,7 +373,7 @@ export function ComplexSearchClient() {
                   return (
                     <g
                       key={node.id}
-                      className={`${styles.node} ${styles[node.type.replace('-', '') as 'root' | 'youtubetopic' | 'tag' | 'xtrend']} ${active ? styles.nodeActive : ''} ${muted ? styles.nodeMuted : ''}`}
+                      className={`${styles.node} ${styleForNode(node.type)} ${active ? styles.nodeActive : ''} ${muted ? styles.nodeMuted : ''}`}
                       transform={`translate(${position.x} ${position.y})`}
                       onClick={() => setSelectedId((current) => current === node.id ? null : node.id)}
                       role="button"
