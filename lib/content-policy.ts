@@ -42,6 +42,26 @@ export const GLOBAL_CONTENT_POLICY = {
     'playlist musical',
     'vevo'
   ],
+  // Categoria 10 do YouTube e canais musicais não significam necessariamente
+  // que o vídeo seja uma faixa/clipe. Ensaios, minidocs e análises long-form
+  // sobre música devem continuar elegíveis.
+  musicEditorialTitleMarkers: [
+    'voce ouviu',
+    'a vida toda',
+    'documentario',
+    'minidoc',
+    'mini doc',
+    'video essay',
+    'ensaio',
+    'analise',
+    'explicando',
+    'entenda',
+    'por tras',
+    'o que aconteceu',
+    'historia de',
+    'historia do',
+    'historia da'
+  ],
   musicChannelMarkers: [
     ' music',
     'música',
@@ -138,6 +158,25 @@ function containsAny(value: string, markers: readonly string[]): boolean {
   return markers.some((marker) => normalized.includes(normalize(marker)));
 }
 
+function looksLikeMusicEditorialVideo(candidate: ContentCandidate): boolean {
+  const durationSeconds = candidate.durationSeconds ?? 0;
+  if (durationSeconds < GLOBAL_CONTENT_POLICY.minimumDurationSeconds) return false;
+
+  const normalizedTitle = normalize(candidate.title);
+  if (containsAny(candidate.title, GLOBAL_CONTENT_POLICY.musicEditorialTitleMarkers)) return true;
+
+  // Títulos longos em forma de pergunta/explicação são um sinal adicional de
+  // conteúdo editorial. Evita liberar uma faixa longa chamada apenas "Por Que",
+  // por exemplo, mas preserva vídeos do tipo "Por que você ouviu X errado?".
+  const explanatoryLead =
+    normalizedTitle.includes('por que ') ||
+    normalizedTitle.startsWith('como ') ||
+    normalizedTitle.startsWith('o que ');
+  const editorialShape = /[?!:]/.test(candidate.title) || normalizedTitle.length >= 32;
+
+  return explanatoryLead && editorialShape;
+}
+
 export function isEditoriallyExcludedChannel(channelTitle: string): boolean {
   const normalizedChannel = normalize(channelTitle);
   return GLOBAL_CONTENT_POLICY.editorialExcludedChannels.some((blocked) =>
@@ -150,6 +189,7 @@ export function evaluateContentEligibility(candidate: ContentCandidate): Content
   const channelText = `${candidate.channelTitle} ${candidate.channelDescription ?? ''}`;
   const videoText = `${candidate.title} ${candidate.description ?? ''} ${(candidate.tags ?? []).join(' ')}`;
   const normalizedChannel = normalize(candidate.channelTitle);
+  const musicEditorialVideo = looksLikeMusicEditorialVideo(candidate);
 
   if (
     candidate.durationSeconds !== undefined &&
@@ -162,18 +202,23 @@ export function evaluateContentEligibility(candidate: ContentCandidate): Content
     reasons.push('live-or-upcoming');
   }
 
-  if (
-    candidate.categoryId &&
-    GLOBAL_CONTENT_POLICY.excludedVideoCategoryIds.has(candidate.categoryId)
-  ) {
-    reasons.push('music-category');
-  }
-
+  // Marcadores explícitos de faixa/clipe prevalecem sobre a heurística editorial.
   if (containsAny(videoText, GLOBAL_CONTENT_POLICY.musicMarkers)) {
     reasons.push('music-content');
   }
 
-  if (containsAny(channelText, GLOBAL_CONTENT_POLICY.musicChannelMarkers)) {
+  if (
+    candidate.categoryId &&
+    GLOBAL_CONTENT_POLICY.excludedVideoCategoryIds.has(candidate.categoryId) &&
+    !musicEditorialVideo
+  ) {
+    reasons.push('music-category');
+  }
+
+  if (
+    containsAny(channelText, GLOBAL_CONTENT_POLICY.musicChannelMarkers) &&
+    !musicEditorialVideo
+  ) {
     reasons.push('music-channel');
   }
 
