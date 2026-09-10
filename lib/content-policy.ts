@@ -190,6 +190,8 @@ export function evaluateContentEligibility(candidate: ContentCandidate): Content
   const videoText = `${candidate.title} ${candidate.description ?? ''} ${(candidate.tags ?? []).join(' ')}`;
   const normalizedChannel = normalize(candidate.channelTitle);
   const musicEditorialVideo = looksLikeMusicEditorialVideo(candidate);
+  const explicitMusicTitle = containsAny(candidate.title, GLOBAL_CONTENT_POLICY.musicMarkers);
+  const musicMarkerAnywhere = containsAny(videoText, GLOBAL_CONTENT_POLICY.musicMarkers);
 
   if (
     candidate.durationSeconds !== undefined &&
@@ -202,8 +204,10 @@ export function evaluateContentEligibility(candidate: ContentCandidate): Content
     reasons.push('live-or-upcoming');
   }
 
-  // Marcadores explícitos de faixa/clipe prevalecem sobre a heurística editorial.
-  if (containsAny(videoText, GLOBAL_CONTENT_POLICY.musicMarkers)) {
+  // Um título que se declara explicitamente clipe/lyric/álbum completo continua
+  // sendo música. Porém, termos musicais encontrados somente em descrição/tags
+  // não derrubam um vídeo que o título+duração identificam como ensaio/minidoc.
+  if (explicitMusicTitle || (musicMarkerAnywhere && !musicEditorialVideo)) {
     reasons.push('music-content');
   }
 
