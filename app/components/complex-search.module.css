@@ -215,6 +215,7 @@
 
 .rootDot { background: #f4f7ff; }
 .youtubeDot { background: #82a7ff; }
+.youtubeVideoDot { background: #62c3da; }
 .tagDot { background: #8793a4; }
 .xDot { background: #c89bff; }
 
@@ -291,6 +292,11 @@
 .youtubetopic circle {
   fill: #5f86e8;
   stroke: #9fbbff;
+}
+
+.youtubevideo circle {
+  fill: #2f879e;
+  stroke: #72d1e8;
 }
 
 .tag circle {
