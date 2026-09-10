@@ -3,6 +3,7 @@ import {
   getLatestManualHypeSnapshot
 } from '@/lib/youtube-history-db';
 import { evaluateContentEligibility } from '@/lib/content-policy';
+import { syncHypePlaylist } from '@/lib/youtube-hype-sync';
 
 const YOUTUBE_API_ROOT = 'https://www.googleapis.com/youtube/v3';
 
@@ -169,15 +170,25 @@ function enforceContentPolicy(cards: HypeVideoCard[], limit: number): HypeVideoC
 }
 
 export async function getHypeDashboard(): Promise<HypeDashboard> {
+  let syncWarning: string | undefined;
+  try {
+    await syncHypePlaylist({ market: 'BR' });
+  } catch (error) {
+    syncWarning = error instanceof Error
+      ? `Falha ao sincronizar playlist Hype: ${error.message}`
+      : 'Falha ao sincronizar playlist Hype.';
+  }
+
   const manual = await getLatestManualHypeSnapshot('BR');
   if (manual?.videoIds.length) {
     let hydrated = { videos: new Map<string, YouTubeVideo>(), channels: new Map<string, YouTubeChannel>() };
-    let apiWarning: string | undefined;
+    let hydrationWarning: string | undefined;
     try {
       hydrated = await hydrateVideoMetadata(manual.videoIds);
     } catch (error) {
-      apiWarning = error instanceof Error ? error.message : 'Falha ao hidratar ranking Hype do YouTube.';
+      hydrationWarning = error instanceof Error ? error.message : 'Falha ao hidratar ranking Hype do YouTube.';
     }
+    const apiWarning = [syncWarning, hydrationWarning].filter(Boolean).join(' | ') || undefined;
 
     const rankedCards = manual.videoIds.slice(0, 10).map((videoId, index) => {
       const current = hydrated.videos.get(videoId);
@@ -229,16 +240,23 @@ export async function getHypeDashboard(): Promise<HypeDashboard> {
 
   const history = await getLatestHistoricalHypeVideos(20);
   if (!history.videos.length) {
-    return { market: 'BR', observedHour: history.observedHour, videos: [], source: 'no-history' };
+    return {
+      market: 'BR',
+      observedHour: history.observedHour,
+      videos: [],
+      source: 'no-history',
+      apiWarning: syncWarning
+    };
   }
 
   let hydrated = { videos: new Map<string, YouTubeVideo>(), channels: new Map<string, YouTubeChannel>() };
-  let apiWarning: string | undefined;
+  let hydrationWarning: string | undefined;
   try {
     hydrated = await hydrateVideoMetadata(history.videos.map((video) => video.videoId));
   } catch (error) {
-    apiWarning = error instanceof Error ? error.message : 'Falha ao hidratar os vídeos atuais do YouTube.';
+    hydrationWarning = error instanceof Error ? error.message : 'Falha ao hidratar os vídeos atuais do YouTube.';
   }
+  const apiWarning = [syncWarning, hydrationWarning].filter(Boolean).join(' | ') || undefined;
 
   const videos = enforceContentPolicy(history.videos.map((video, index) => {
     const current = hydrated.videos.get(video.videoId);
