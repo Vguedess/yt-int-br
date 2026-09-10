@@ -152,7 +152,7 @@ export async function getHypeDashboard(): Promise<HypeDashboard> {
       apiWarning = error instanceof Error ? error.message : 'Falha ao hidratar ranking Hype do YouTube.';
     }
 
-    const videos = enforceContentPolicy(manual.videoIds.map((videoId, index) => {
+    const rankedCards = manual.videoIds.slice(0, 10).map((videoId, index) => {
       const current = hydrated.videos.get(videoId);
       const channelId = current?.snippet?.channelId ?? '';
       const channel = hydrated.channels.get(channelId);
@@ -175,7 +175,12 @@ export async function getHypeDashboard(): Promise<HypeDashboard> {
         viralForce: null,
         nodeTier: null
       } satisfies HypeVideoCard;
-    }), 10);
+    });
+
+    const playlistOrderIsAuthoritative = manual.filters.includes('playlist_order_top_10');
+    const videos = playlistOrderIsAuthoritative
+      ? rankedCards
+      : enforceContentPolicy(rankedCards, 10);
 
     return {
       market: 'BR',

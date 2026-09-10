@@ -18,6 +18,16 @@ type Props = {
   observedAt?: string | null;
 };
 
+type ApiPayload = {
+  ok?: boolean;
+  error?: string;
+  message?: string;
+  invalidRanks?: number[];
+  found?: number;
+  required?: number;
+  playlistId?: string | null;
+};
+
 export function HypeManualEditor({ currentVideoIds = [], observedAt = null }: Props) {
   const router = useRouter();
   const initialLinks = useMemo(() => Array.from({ length: 10 }, (_, index) => {
@@ -26,26 +36,48 @@ export function HypeManualEditor({ currentVideoIds = [], observedAt = null }: Pr
   }), [currentVideoIds]);
 
   const [open, setOpen] = useState(false);
+  const [playlistUrl, setPlaylistUrl] = useState('');
   const [links, setLinks] = useState<string[]>(initialLinks);
   const [secret, setSecret] = useState('');
   const [status, setStatus] = useState<'idle' | 'saving' | 'success' | 'error'>('idle');
   const [message, setMessage] = useState('');
 
-  function updateLink(index: number, value: string) {
-    setLinks((current) => current.map((link, position) => position === index ? value : link));
+  function resetStatus() {
     if (status !== 'idle') {
       setStatus('idle');
       setMessage('');
     }
   }
 
+  function updateLink(index: number, value: string) {
+    setLinks((current) => current.map((link, position) => position === index ? value : link));
+    resetStatus();
+  }
+
+  function describeApiError(payload: ApiPayload): string {
+    if (payload.error === 'unauthorized') return 'Chave administrativa inválida.';
+    if (payload.error === 'invalid_youtube_playlist_url') return 'Link de playlist do YouTube inválido.';
+    if (payload.error === 'youtube_api_key_not_configured') return 'YOUTUBE_API_KEY não está configurada no servidor.';
+    if (payload.error === 'youtube_playlist_fetch_failed') return 'O YouTube não permitiu ler essa playlist. Verifique se ela é pública e tente novamente.';
+    if (payload.error === 'youtube_playlist_has_fewer_than_10_videos') {
+      return `A playlist retornou apenas ${payload.found ?? 0} vídeos válidos; são necessários ${payload.required ?? 10}.`;
+    }
+    if (payload.error === 'youtube_playlist_contains_duplicate_videos_top_10') return 'Há vídeos duplicados entre as dez primeiras posições da playlist.';
+    if (payload.error === 'invalid_youtube_links') return `Link inválido na posição: ${(payload.invalidRanks ?? []).join(', ')}.`;
+    if (payload.error === 'duplicate_video_links') return 'Há vídeos duplicados na lista.';
+    if (payload.error === 'exactly_10_links_required') return 'O ranking deve conter exatamente 10 vídeos.';
+    if (payload.error === 'manual_hype_secret_required') return 'A chave administrativa ainda não foi configurada no servidor.';
+    return payload.error ?? 'Falha ao salvar o ranking Hype.';
+  }
+
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const normalized = links.map(asYoutubeUrl);
+    const usePlaylist = Boolean(playlistUrl.trim());
 
-    if (normalized.some((link) => !link)) {
+    if (!usePlaylist && normalized.some((link) => !link)) {
       setStatus('error');
-      setMessage('Preencha os 10 links, na ordem exata do ranking Hype.');
+      setMessage('Cole uma playlist do YouTube ou preencha os 10 links individuais na ordem do ranking Hype.');
       return;
     }
     if (!secret.trim()) {
@@ -55,7 +87,7 @@ export function HypeManualEditor({ currentVideoIds = [], observedAt = null }: Pr
     }
 
     setStatus('saving');
-    setMessage('Salvando novo snapshot…');
+    setMessage(usePlaylist ? 'Importando as 10 primeiras posições da playlist…' : 'Salvando novo snapshot…');
 
     try {
       const response = await fetch('/api/hype/manual', {
@@ -64,23 +96,14 @@ export function HypeManualEditor({ currentVideoIds = [], observedAt = null }: Pr
           'Content-Type': 'application/json',
           Authorization: `Bearer ${secret.trim()}`
         },
-        body: JSON.stringify({ links: normalized })
+        body: JSON.stringify(usePlaylist
+          ? { playlistUrl: playlistUrl.trim() }
+          : { links: normalized })
       });
-      const payload = await response.json() as {
-        ok?: boolean;
-        error?: string;
-        message?: string;
-        invalidRanks?: number[];
-      };
+      const payload = await response.json() as ApiPayload;
 
       if (!response.ok || !payload.ok) {
-        if (payload.error === 'unauthorized') throw new Error('Chave administrativa inválida.');
-        if (payload.error === 'invalid_youtube_links') {
-          throw new Error(`Link inválido na posição: ${(payload.invalidRanks ?? []).join(', ')}.`);
-        }
-        if (payload.error === 'duplicate_video_links') throw new Error('Há vídeos duplicados na lista.');
-        if (payload.error === 'exactly_10_links_required') throw new Error('O ranking deve conter exatamente 10 vídeos.');
-        throw new Error(payload.error ?? 'Falha ao salvar o ranking Hype.');
+        throw new Error(describeApiError(payload));
       }
 
       setStatus('success');
@@ -95,7 +118,7 @@ export function HypeManualEditor({ currentVideoIds = [], observedAt = null }: Pr
   return (
     <div className={styles.editor}>
       <button className={styles.toggle} type="button" onClick={() => setOpen((value) => !value)} aria-expanded={open}>
-        {open ? 'Fechar atualização manual' : 'Atualizar Top 10 Hype manualmente'}
+        {open ? 'Fechar atualização do Hype' : 'Atualizar Top 10 Hype'}
       </button>
 
       {open ? (
@@ -103,10 +126,30 @@ export function HypeManualEditor({ currentVideoIds = [], observedAt = null }: Pr
           <div className={styles.heading}>
             <div>
               <strong>Novo snapshot do YouTube Hype Brasil</strong>
-              <p>Cole os 10 links em ordem, do HYPE #1 ao HYPE #10. O lote é salvo de forma consolidada e só deixa de ser o ranking ativo quando um novo lote for gravado.</p>
+              <p>Preferencialmente, cole a playlist do ranking. O sistema lê as 10 primeiras posições e salva #1 a #10 exatamente na ordem da playlist. Os 10 links individuais continuam disponíveis como alternativa.</p>
             </div>
             {observedAt ? <span>Snapshot ativo já existe</span> : <span>Sem snapshot ativo</span>}
           </div>
+
+          <div className={styles.playlistBox}>
+            <label className={styles.playlistRow}>
+              <span>Playlist Hype</span>
+              <input
+                type="url"
+                inputMode="url"
+                autoComplete="off"
+                placeholder="https://www.youtube.com/playlist?list=..."
+                value={playlistUrl}
+                onChange={(event) => {
+                  setPlaylistUrl(event.target.value);
+                  resetStatus();
+                }}
+              />
+            </label>
+            <p>Se este campo estiver preenchido, a playlist tem prioridade e os links individuais abaixo são ignorados neste envio.</p>
+          </div>
+
+          <div className={styles.divider}><span>ou use os 10 links individuais</span></div>
 
           <div className={styles.inputs}>
             {links.map((link, index) => (
@@ -119,7 +162,7 @@ export function HypeManualEditor({ currentVideoIds = [], observedAt = null }: Pr
                   placeholder="https://www.youtube.com/watch?v=..."
                   value={link}
                   onChange={(event) => updateLink(index, event.target.value)}
-                  required
+                  required={!playlistUrl.trim()}
                 />
               </label>
             ))}
@@ -139,7 +182,9 @@ export function HypeManualEditor({ currentVideoIds = [], observedAt = null }: Pr
 
           <div className={styles.actions}>
             <button type="submit" disabled={status === 'saving'}>
-              {status === 'saving' ? 'Salvando…' : 'Salvar Top 10 como novo snapshot'}
+              {status === 'saving'
+                ? (playlistUrl.trim() ? 'Importando playlist…' : 'Salvando…')
+                : (playlistUrl.trim() ? 'Importar playlist e salvar Top 10' : 'Salvar Top 10 como novo snapshot')}
             </button>
             <span>Os snapshots antigos não são apagados do Neon.</span>
           </div>

@@ -1,6 +1,10 @@
 import { randomUUID, timingSafeEqual } from 'node:crypto';
 import { NextRequest, NextResponse } from 'next/server';
 import { persistManualHypeSnapshot } from '@/lib/youtube-history-db';
+import {
+  getTopYoutubePlaylistVideoIds,
+  YoutubePlaylistImportError
+} from '@/lib/youtube-playlist';
 
 export const dynamic = 'force-dynamic';
 
@@ -55,44 +59,63 @@ function parseYoutubeVideoId(input: string): string | null {
   return null;
 }
 
+function jsonNoStore(payload: Record<string, unknown>, status: number) {
+  return NextResponse.json(payload, {
+    status,
+    headers: { 'Cache-Control': 'no-store' }
+  });
+}
+
 export async function POST(request: NextRequest) {
   const auth = authorize(request);
   if (!auth.ok) {
-    return NextResponse.json({ ok: false, error: auth.error }, {
-      status: auth.status,
-      headers: { 'Cache-Control': 'no-store' }
-    });
+    return jsonNoStore({ ok: false, error: auth.error }, auth.status);
   }
 
   try {
-    const body = await request.json() as { links?: unknown };
-    if (!Array.isArray(body.links)) {
-      return NextResponse.json({ ok: false, error: 'links_must_be_an_array' }, { status: 400 });
-    }
+    const body = await request.json() as { links?: unknown; playlistUrl?: unknown };
+    const playlistUrl = typeof body.playlistUrl === 'string' ? body.playlistUrl.trim() : '';
 
-    if (body.links.length !== 10) {
-      return NextResponse.json({ ok: false, error: 'exactly_10_links_required' }, { status: 400 });
-    }
+    let videoIds: string[];
+    let source: string;
+    let filters: string[];
+    let playlistId: string | null = null;
 
-    const ids = body.links.map((value) => parseYoutubeVideoId(String(value ?? '')));
-    const invalidRanks = ids
-      .map((id, index) => id ? null : index + 1)
-      .filter((rank): rank is number => rank != null);
+    if (playlistUrl) {
+      const imported = await getTopYoutubePlaylistVideoIds(playlistUrl, 10);
+      videoIds = imported.videoIds;
+      playlistId = imported.playlistId;
+      source = `YouTube Hype Brasil · playlist ${playlistId} · ordem oficial da playlist`;
+      filters = ['youtube_hype_playlist', 'playlist_order_top_10'];
+    } else {
+      if (!Array.isArray(body.links)) {
+        return jsonNoStore({ ok: false, error: 'links_must_be_an_array' }, 400);
+      }
 
-    if (invalidRanks.length) {
-      return NextResponse.json({
-        ok: false,
-        error: 'invalid_youtube_links',
-        invalidRanks
-      }, { status: 400, headers: { 'Cache-Control': 'no-store' } });
-    }
+      if (body.links.length !== 10) {
+        return jsonNoStore({ ok: false, error: 'exactly_10_links_required' }, 400);
+      }
 
-    const videoIds = ids as string[];
-    if (new Set(videoIds).size !== 10) {
-      return NextResponse.json({ ok: false, error: 'duplicate_video_links' }, {
-        status: 400,
-        headers: { 'Cache-Control': 'no-store' }
-      });
+      const ids = body.links.map((value) => parseYoutubeVideoId(String(value ?? '')));
+      const invalidRanks = ids
+        .map((id, index) => id ? null : index + 1)
+        .filter((rank): rank is number => rank != null);
+
+      if (invalidRanks.length) {
+        return jsonNoStore({
+          ok: false,
+          error: 'invalid_youtube_links',
+          invalidRanks
+        }, 400);
+      }
+
+      videoIds = ids as string[];
+      if (new Set(videoIds).size !== 10) {
+        return jsonNoStore({ ok: false, error: 'duplicate_video_links' }, 400);
+      }
+
+      source = 'YouTube Hype Brasil · top 10 manual pelo painel';
+      filters = ['exclude_music', 'exclude_kids_and_youth_low_quality', 'manual_top_10'];
     }
 
     const stamp = new Date().toISOString().replace(/[:.]/g, '-');
@@ -100,19 +123,31 @@ export async function POST(request: NextRequest) {
       batchId: `manual-youtube-hype-br-${stamp}-${randomUUID().slice(0, 8)}`,
       market: 'BR',
       videoIds,
-      source: 'YouTube Hype Brasil · top 10 manual pelo painel',
-      filters: ['exclude_music', 'exclude_kids_and_youth_low_quality', 'manual_top_10']
+      source,
+      filters
     });
 
-    return NextResponse.json({
+    return jsonNoStore({
       ok: true,
       snapshot,
-      message: 'Top 10 Hype salvo como novo snapshot. O lote anterior permanece no histórico.'
-    }, { status: 201, headers: { 'Cache-Control': 'no-store' } });
+      playlistId,
+      videoIds,
+      message: playlistId
+        ? 'Top 10 importado da playlist e salvo como novo snapshot, preservando a ordem #1 a #10.'
+        : 'Top 10 Hype salvo como novo snapshot. O lote anterior permanece no histórico.'
+    }, 201);
   } catch (error) {
-    return NextResponse.json({
+    if (error instanceof YoutubePlaylistImportError) {
+      return jsonNoStore({
+        ok: false,
+        error: error.code,
+        ...error.details
+      }, error.status);
+    }
+
+    return jsonNoStore({
       ok: false,
       error: error instanceof Error ? error.message : 'Falha desconhecida ao salvar Hype manual.'
-    }, { status: 500, headers: { 'Cache-Control': 'no-store' } });
+    }, 500);
   }
 }

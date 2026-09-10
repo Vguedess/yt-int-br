@@ -10,11 +10,11 @@ export default async function VguedessLayout({ children }: Readonly<{ children: 
   return (
     <>
       {children}
-      <aside className={styles.shell} aria-label="Atualização manual do ranking Hype">
+      <aside className={styles.shell} aria-label="Atualização do ranking Hype">
         <div className={styles.copy}>
-          <span>YOUTUBE HYPE · ENTRADA MANUAL</span>
+          <span>YOUTUBE HYPE · PLAYLIST OU ENTRADA MANUAL</span>
           <strong>Atualizar Top 10</strong>
-          <p>O novo lote substitui o ranking ativo, mas os snapshots anteriores permanecem armazenados no banco.</p>
+          <p>Cole a playlist do Hype para importar automaticamente as dez primeiras posições. O novo lote substitui o ranking ativo, mas os snapshots anteriores permanecem armazenados no banco.</p>
         </div>
         <HypeManualEditor currentVideoIds={current?.videoIds ?? []} observedAt={current?.observedAt ?? null} />
       </aside>

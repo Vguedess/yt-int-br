@@ -54,6 +54,51 @@
   font-size: .68rem;
 }
 
+.playlistBox {
+  padding: 12px;
+  border: 1px solid rgba(255,255,255,.12);
+  border-radius: 12px;
+  background: rgba(255,255,255,.035);
+}
+
+.playlistRow {
+  display: grid;
+  grid-template-columns: 110px minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+}
+
+.playlistRow > span {
+  color: rgba(244,246,248,.78);
+  font-size: .73rem;
+  font-weight: 800;
+}
+
+.playlistBox p {
+  margin: 8px 0 0 120px;
+  color: rgba(244,246,248,.5);
+  font-size: .68rem;
+  line-height: 1.45;
+}
+
+.divider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: rgba(244,246,248,.38);
+  font-size: .66rem;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+}
+
+.divider::before,
+.divider::after {
+  content: '';
+  height: 1px;
+  flex: 1;
+  background: rgba(255,255,255,.08);
+}
+
 .inputs {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -74,6 +119,7 @@
 }
 
 .row input,
+.playlistRow input,
 .secretRow input {
   width: 100%;
   min-width: 0;
@@ -88,6 +134,7 @@
 }
 
 .row input:focus,
+.playlistRow input:focus,
 .secretRow input:focus {
   border-color: rgba(255,255,255,.28);
 }
@@ -168,7 +215,12 @@
     flex-direction: column;
   }
 
+  .playlistRow,
   .secretRow {
     grid-template-columns: 1fr;
+  }
+
+  .playlistBox p {
+    margin-left: 0;
   }
 }
