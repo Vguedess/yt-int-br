@@ -12,9 +12,9 @@ export default async function VguedessLayout({ children }: Readonly<{ children: 
       {children}
       <aside className={styles.shell} aria-label="Atualização do ranking Hype">
         <div className={styles.copy}>
-          <span>YOUTUBE HYPE · PLAYLIST OU ENTRADA MANUAL</span>
-          <strong>Atualizar Top 10</strong>
-          <p>Cole a playlist do Hype para importar automaticamente as dez primeiras posições. O novo lote substitui o ranking ativo, mas os snapshots anteriores permanecem armazenados no banco.</p>
+          <span>YOUTUBE HYPE · PLAYLIST SINCRONIZADA</span>
+          <strong>Sincronização automática ativa</strong>
+          <p>A playlist oficial é verificada automaticamente quando o radar é consultado, com janela mínima de 15 minutos, e também pelo cron diário. Um novo snapshot só é criado quando o Top 10 ou sua ordem realmente muda. O painel abaixo permanece como atualização manual de emergência.</p>
         </div>
         <HypeManualEditor currentVideoIds={current?.videoIds ?? []} observedAt={current?.observedAt ?? null} />
       </aside>
