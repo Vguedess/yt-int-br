@@ -206,12 +206,14 @@ export async function getHypeDashboard(): Promise<HypeDashboard> {
 
     // O snapshot guarda sempre o Top 10 oficial inteiro. A política editorial é aplicada
     // somente na exibição. Itens removidos não são substituídos pelo #11+ e o rank oficial
-    // é preservado (ex.: se HYPE #2 for filtrado, HYPE #3 continua sendo HYPE #3).
-    const videos = rankedCards.filter((card) => {
-      const current = hydrated.videos.get(card.videoId);
-      const channel = hydrated.channels.get(card.channelId);
-      return isEligibleHypeVideo(card, current, channel);
-    });
+    // é preservado. A interface mostra no máximo os 4 primeiros itens elegíveis do Top 10.
+    const videos = rankedCards
+      .filter((card) => {
+        const current = hydrated.videos.get(card.videoId);
+        const channel = hydrated.channels.get(card.channelId);
+        return isEligibleHypeVideo(card, current, channel);
+      })
+      .slice(0, 4);
 
     return {
       market: 'BR',
